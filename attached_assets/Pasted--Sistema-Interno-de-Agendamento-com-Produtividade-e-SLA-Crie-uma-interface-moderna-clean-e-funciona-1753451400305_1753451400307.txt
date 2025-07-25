@@ -1,0 +1,102 @@
+ Sistema Interno de Agendamento com Produtividade e SLA
+Crie uma interface moderna, clean e funcional para gestão interna de agendamentos, voltada para uso individual do administrador.
+O foco do sistema é organizar tarefas com controle de tempo, produtividade, e cumprimento de SLA.
+
+✅ FUNCIONALIDADES ESSENCIAIS
+1. Cadastro de Agendamento
+Campos obrigatórios:
+
+Título do agendamento
+
+Descrição
+
+Data
+
+Hora de início
+
+Duração estimada (em minutos ou horas) → calcula a hora de término automaticamente
+
+Quem estará comigo (campo de texto simples)
+
+Projeto associado (cadastrado apenas com o nome)
+
+Empresa associada (cadastrada apenas com o nome)
+
+Tempo de SLA (em minutos ou horas)
+
+Exemplo: SLA de 2h para uma tarefa de 1h
+
+⏱️ SLA (Service Level Agreement)
+Campo para informar quanto tempo é o prazo máximo permitido para concluir aquele agendamento.
+
+Sistema deve calcular e indicar:
+
+Se o SLA foi cumprido
+
+Se o agendamento foi concluído fora do SLA
+
+2. Pomodoro Automático
+Sempre que um novo agendamento for criado, gerar um agendamento adicional de 5 minutos intitulado "Pomodoro", logo após o término da tarefa principal.
+
+3. Gerenciamento e Filtros
+Visualizar, editar e controlar status de cada agendamento:
+
+✅ Concluído
+
+⏰ Atrasado
+
+🔁 Reagendar
+
+🗑️ Excluir
+
+Filtros e navegação:
+
+📅 Calendário interativo (clicar na data para ver tarefas)
+
+🔎 Filtros por:
+
+Data (dia/semana/mês)
+
+Projeto
+
+Empresa
+
+Pessoas envolvidas
+
+SLA vencido / dentro do prazo
+
+4. Resumo de Produtividade
+Painel com indicadores:
+
+📊 Agendamentos concluídos no dia / semana / mês
+
+⏱️ Total de horas agendadas x horas concluídas
+
+🔁 Quantidade de reagendamentos
+
+❌ Tarefas que excederam o SLA
+
+✅ Percentual de cumprimento de SLA
+
+💄 Interface e Design
+Layout limpo, painel lateral ou superior
+
+Cores e ícones para status:
+
+Verde: Concluído
+
+Vermelho: Atrasado ou SLA vencido
+
+Azul: Futuro
+
+Cinza: Pomodoro
+
+Tags e visual diferenciados para Pomodoro e status de SLA
+
+⚙️ Regras de negócio
+Apenas 1 usuário administrador pode operar o sistema
+
+Projetos, empresas e pessoas associadas são texto livre
+
+SLA é um campo manual e opcional — se não preenchido, o sistema ignora o controle de SLA para aquela tarefa
+
