@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,15 +7,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Check, Clock, Edit, Trash2, AlertTriangle } from "lucide-react";
+import { Check, Clock, Edit, Trash2, AlertTriangle, Building2, FolderOpen, User, Repeat, Link } from "lucide-react";
 import { formatDisplayDate, getAppointmentStatus, isSLAExpired } from "@/lib/date-utils";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import AppointmentForm from "./appointment-form";
+import TimerControls from "./timer-controls";
+import AppointmentStatusFilter, { StatusFilter, TimeFilter } from "@/components/appointment-status-filter";
+import { useAppointmentFilters } from "@/hooks/use-appointment-filters";
+import AppointmentOverlapIndicator, { useAppointmentOverlaps } from "@/components/appointment-overlap-indicator";
 
 interface TaskListProps {
   selectedDate: string;
   filters?: any;
+  showStatusFilter?: boolean;
+  statusFilter?: StatusFilter;
+  timeFilter?: TimeFilter;
+  onStatusFilterChange?: (filter: StatusFilter) => void;
+  onTimeFilterChange?: (filter: TimeFilter) => void;
 }
 
 const STATUS_CONFIG = {
@@ -49,7 +58,16 @@ const STATUS_CONFIG = {
   }
 };
 
-export default function TaskList({ selectedDate, filters = {} }: TaskListProps) {
+export default function TaskList({
+  selectedDate,
+  filters = {},
+  showStatusFilter = true,
+  statusFilter: externalStatusFilter,
+  timeFilter: externalTimeFilter,
+  onStatusFilterChange: externalOnStatusFilterChange,
+  onTimeFilterChange: externalOnTimeFilterChange
+}: TaskListProps) {
+  console.log('TaskList - selectedDate:', selectedDate);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
@@ -57,23 +75,96 @@ export default function TaskList({ selectedDate, filters = {} }: TaskListProps) 
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
+  const [forceRender, setForceRender] = useState(0);
+
+  // Force re-render when selectedDate changes
+  useEffect(() => {
+    console.log('TaskList - useEffect triggered, selectedDate changed to:', selectedDate);
+    setForceRender(prev => prev + 1);
+  }, [selectedDate]);
 
   const { data: allAppointments = [], isLoading } = useQuery({
-    queryKey: ['/api/appointments/date', selectedDate],
+    queryKey: ['/api/appointments'],
   });
 
-  // Apply filters to appointments
-  const appointments = allAppointments.filter((appointment: any) => {
+  // Fetch related data for displaying assignment information
+  const { data: companies = [] } = useQuery({
+    queryKey: ['/api/companies'],
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['/api/projects'],
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['/api/users'],
+  });
+
+  // Helper functions to get related data
+  const getCompanyName = (appointment: any) => {
+    console.log('getCompanyName - appointment:', appointment.id, 'companyId:', appointment.companyId, 'company:', appointment.company);
+    if (appointment.companyId) {
+      const company = companies.find((c: any) => c.id === appointment.companyId);
+      console.log('Found company:', company);
+      return company?.name;
+    }
+    return appointment.company; // fallback to legacy field
+  };
+
+  const getProjectName = (appointment: any) => {
+    console.log('getProjectName - appointment:', appointment.id, 'projectId:', appointment.projectId, 'project:', appointment.project);
+    if (appointment.projectId) {
+      const project = projects.find((p: any) => p.id === appointment.projectId);
+      console.log('Found project:', project);
+      return project?.name;
+    }
+    return appointment.project; // fallback to legacy field
+  };
+
+  const getAssignedUserName = (appointment: any) => {
+    console.log('getAssignedUserName - appointment:', appointment.id, 'assignedUserId:', appointment.assignedUserId);
+    if (appointment.assignedUserId) {
+      const user = users.find((u: any) => u.id === appointment.assignedUserId);
+      console.log('Found user:', user);
+      return user?.name;
+    }
+    return null;
+  };
+
+  // Use the appointment filters hook
+  const {
+    filteredAppointments,
+    appointmentCounts,
+    statusFilter,
+    timeFilter,
+    setStatusFilter,
+    setTimeFilter
+  } = useAppointmentFilters({
+    appointments: allAppointments,
+    selectedDate
+  });
+
+  // Use external filter controls if provided, otherwise use internal ones
+  const currentStatusFilter = externalStatusFilter || statusFilter;
+  const currentTimeFilter = externalTimeFilter || timeFilter;
+  const handleStatusFilterChange = externalOnStatusFilterChange || setStatusFilter;
+  const handleTimeFilterChange = externalOnTimeFilterChange || setTimeFilter;
+
+  // Detect overlapping appointments
+  const { appointmentsWithOverlaps, getOverlappingAppointments } = useAppointmentOverlaps(allAppointments);
+
+  // Apply legacy filters to the already filtered appointments
+  const appointments = filteredAppointments.filter((appointment: any) => {
     // Project filter
     if (filters.project && filters.project !== 'all' && appointment.project !== filters.project) {
       return false;
     }
-    
+
     // Company filter
     if (filters.company && filters.company !== 'all' && appointment.company !== filters.company) {
       return false;
     }
-    
+
     // SLA Status filter
     if (filters.slaStatus && filters.slaStatus !== 'all') {
       const slaExpired = isSLAExpired(appointment);
@@ -87,7 +178,7 @@ export default function TaskList({ selectedDate, filters = {} }: TaskListProps) 
         return false;
       }
     }
-    
+
     return true;
   });
 
@@ -112,17 +203,47 @@ export default function TaskList({ selectedDate, filters = {} }: TaskListProps) 
 
   const deleteTaskMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest('DELETE', `/api/appointments/${id}`);
+      console.log(`🗑️ Frontend: Starting deletion of appointment ${id}`);
+      try {
+        const response = await apiRequest('DELETE', `/api/appointments/${id}`);
+        console.log(`✅ Frontend: Appointment ${id} deleted successfully`);
+        return response;
+      } catch (error) {
+        console.error(`❌ Frontend: Error deleting appointment ${id}:`, error);
+        throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      console.log(`🔄 Frontend: Invalidating queries after deleting appointment ${variables}`);
       queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
       queryClient.invalidateQueries({ queryKey: ['/api/appointments/date', selectedDate] });
       queryClient.invalidateQueries({ queryKey: ['/api/stats/productivity'] });
-      toast({ title: "Tarefa excluída com sucesso!" });
+      toast({
+        title: "Tarefa excluída com sucesso!",
+        description: `A tarefa foi removida permanentemente.`
+      });
     },
-    onError: (error: any) => {
-      console.error("Erro ao excluir tarefa:", error);
-      toast({ title: "Erro ao excluir tarefa", variant: "destructive" });
+    onError: (error: any, variables) => {
+      console.error(`❌ Frontend: Failed to delete appointment ${variables}:`, error);
+
+      let errorMessage = "Erro ao excluir tarefa";
+      let errorDescription = "Ocorreu um erro inesperado. Tente novamente.";
+
+      if (error?.response?.status === 404) {
+        errorMessage = "Tarefa não encontrada";
+        errorDescription = "A tarefa pode já ter sido excluída.";
+      } else if (error?.response?.status === 400) {
+        errorMessage = "Dados inválidos";
+        errorDescription = "ID da tarefa é inválido.";
+      } else if (error?.response?.data?.details) {
+        errorDescription = error.response.data.details;
+      }
+
+      toast({
+        title: errorMessage,
+        description: errorDescription,
+        variant: "destructive"
+      });
     }
   });
 
@@ -184,17 +305,34 @@ export default function TaskList({ selectedDate, filters = {} }: TaskListProps) 
   }
 
   return (
-    <Card>
+    <Card key={`task-list-${selectedDate}-${forceRender}`}>
       <CardHeader>
         <CardTitle className="text-lg font-semibold text-gray-900">
-          Agendamentos de {formatDisplayDate(selectedDate)}
+          Agendamentos
         </CardTitle>
       </CardHeader>
-      
+
+      {showStatusFilter && (
+        <div className="px-6 pb-4">
+          <AppointmentStatusFilter
+            statusFilter={currentStatusFilter}
+            timeFilter={currentTimeFilter}
+            onStatusFilterChange={handleStatusFilterChange}
+            onTimeFilterChange={handleTimeFilterChange}
+            appointmentCounts={appointmentCounts}
+          />
+        </div>
+      )}
+
       <CardContent className="space-y-3">
         {appointments.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
-            Nenhum agendamento para esta data
+            {currentStatusFilter === 'all' && 'Nenhum agendamento encontrado'}
+            {currentStatusFilter === 'open' && 'Nenhum agendamento pendente'}
+            {currentStatusFilter === 'completed' && 'Nenhum agendamento concluído'}
+            {currentTimeFilter === 'day' && ' para este período'}
+            {currentTimeFilter === 'week' && ' para esta semana'}
+            {currentTimeFilter === 'month' && ' para este mês'}
           </div>
         ) : (
           appointments.map((appointment: any) => {
@@ -219,24 +357,66 @@ export default function TaskList({ selectedDate, filters = {} }: TaskListProps) 
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-gray-900">
-                          {appointment.title}
-                          {appointment.company && ` - ${appointment.company}`}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-gray-900">
+                            {appointment.title}
+                          </p>
+                          {appointment.isRecurring && (
+                            <div className="flex items-center gap-1">
+                              <Repeat className="w-3 h-3 text-blue-500" title="Tarefa recorrente" />
+                              <span className="text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">
+                                {appointment.recurrencePattern === 'daily' && 'Diário'}
+                                {appointment.recurrencePattern === 'weekly' && 'Semanal'}
+                                {appointment.recurrencePattern === 'monthly' && 'Mensal'}
+                                {appointment.recurrencePattern === 'yearly' && 'Anual'}
+                              </span>
+                            </div>
+                          )}
+                          {appointment.recurringTaskId && !appointment.isRecurringTemplate && (
+                            <div className="flex items-center gap-1">
+                              <Link className="w-3 h-3 text-green-500" title="Instância de tarefa recorrente" />
+                              <span className="text-xs text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
+                                Instância
+                              </span>
+                            </div>
+                          )}
+                          {appointment.wasRescheduledFromWeekend && (
+                            <span className="text-xs text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded" title="Reagendado do fim de semana">
+                              Reagendado
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded ml-2">
                           ID: {appointment.id}
                         </span>
                       </div>
-                      {appointment.project && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Projeto: {appointment.project}
-                        </p>
-                      )}
-                      {appointment.peopleWith && (
-                        <p className="text-xs text-gray-500">
-                          Com: {appointment.peopleWith}
-                        </p>
-                      )}
+
+                      {/* Assignment Information */}
+                      <div className="mt-2 space-y-1">
+                        {getCompanyName(appointment) && (
+                          <div className="flex items-center text-xs text-gray-600">
+                            <Building2 className="w-3 h-3 mr-1 text-blue-500" />
+                            <span>{getCompanyName(appointment)}</span>
+                          </div>
+                        )}
+                        {getProjectName(appointment) && (
+                          <div className="flex items-center text-xs text-gray-600">
+                            <FolderOpen className="w-3 h-3 mr-1 text-green-500" />
+                            <span>{getProjectName(appointment)}</span>
+                          </div>
+                        )}
+                        {getAssignedUserName(appointment) && (
+                          <div className="flex items-center text-xs text-gray-600">
+                            <User className="w-3 h-3 mr-1 text-purple-500" />
+                            <span>{getAssignedUserName(appointment)}</span>
+                          </div>
+                        )}
+                        {appointment.peopleWith && (
+                          <p className="text-xs text-gray-500">
+                            Com: {appointment.peopleWith}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="flex items-center space-x-2 ml-4">
@@ -291,30 +471,97 @@ export default function TaskList({ selectedDate, filters = {} }: TaskListProps) 
                           variant="ghost"
                           className="p-1 h-6 w-6"
                           onClick={() => {
-                            console.log("Excluindo:", appointment.id);
-                            deleteTaskMutation.mutate(appointment.id);
+                            console.log(`🗑️ User clicked delete for appointment: ${appointment.id} - "${appointment.title}"`);
+
+                            // Handle recurring task deletion
+                            if (appointment.recurringTaskId && !appointment.isRecurringTemplate) {
+                              // This is a recurring task instance
+                              const choice = window.confirm(
+                                `Esta é uma instância de tarefa recorrente "${appointment.title}".\n\n` +
+                                `Clique OK para excluir apenas esta instância, ou Cancelar para escolher outras opções.`
+                              );
+
+                              if (choice) {
+                                console.log(`✅ User confirmed deletion of single instance ${appointment.id}`);
+                                deleteTaskMutation.mutate(appointment.id);
+                              } else {
+                                // Show options for recurring task deletion
+                                const deleteAll = window.confirm(
+                                  `Deseja excluir TODAS as instâncias desta tarefa recorrente?\n\n` +
+                                  `OK = Excluir todas as instâncias\n` +
+                                  `Cancelar = Não excluir nada`
+                                );
+
+                                if (deleteAll) {
+                                  console.log(`✅ User confirmed deletion of all recurring instances for ${appointment.id}`);
+                                  // Use the recurring deletion endpoint
+                                  deleteTaskMutation.mutate(`${appointment.id}?deleteAll=true`);
+                                } else {
+                                  console.log(`❌ User cancelled deletion of appointment ${appointment.id}`);
+                                }
+                              }
+                            } else {
+                              // Regular task or recurring template
+                              let confirmMessage = `Tem certeza que deseja excluir a tarefa "${appointment.title}"?\n\nEsta ação não pode ser desfeita.`;
+
+                              if (appointment.isRecurring) {
+                                confirmMessage = `Esta é uma tarefa recorrente "${appointment.title}".\n\n` +
+                                               `Excluir irá remover TODAS as instâncias desta tarefa recorrente.\n\n` +
+                                               `Esta ação não pode ser desfeita.`;
+                              }
+
+                              const confirmed = window.confirm(confirmMessage);
+
+                              if (confirmed) {
+                                console.log(`✅ User confirmed deletion of appointment ${appointment.id}`);
+                                deleteTaskMutation.mutate(appointment.id);
+                              } else {
+                                console.log(`❌ User cancelled deletion of appointment ${appointment.id}`);
+                              }
+                            }
                           }}
                           disabled={deleteTaskMutation.isPending}
-                          title="Excluir"
+                          title="Excluir tarefa"
                         >
-                          <Trash2 className="w-3 h-3 text-red-500" />
+                          <Trash2 className={`w-3 h-3 ${deleteTaskMutation.isPending ? 'text-gray-400' : 'text-red-500'}`} />
                         </Button>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                    <span>
-                      <Clock className="w-3 h-3 inline mr-1" />
-                      {appointment.startTime} - {appointment.endTime}
-                    </span>
-                    <span>
-                      ⏱️ {Math.round(appointment.durationMinutes / 60 * 10) / 10}h
-                    </span>
-                    <Badge variant={status === 'completed' ? 'default' : 'secondary'} className={config.badgeColor}>
-                      <StatusIcon className="w-3 h-3 mr-1" />
-                      {config.label}
-                    </Badge>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center space-x-4 text-xs text-gray-500">
+                      <span>
+                        <Clock className="w-3 h-3 inline mr-1" />
+                        {appointment.startTime} - {appointment.endTime}
+                      </span>
+                      <span>
+                        ⏱️ {Math.round((appointment.actualTimeMinutes || 0) / 60 * 10) / 10}h
+                        <span className="text-gray-400 text-xs ml-1">
+                          / {Math.round(appointment.durationMinutes / 60 * 10) / 10}h
+                        </span>
+                      </span>
+                      <Badge variant={status === 'completed' ? 'default' : 'secondary'} className={config.badgeColor}>
+                        <StatusIcon className="w-3 h-3 mr-1" />
+                        {config.label}
+                      </Badge>
+
+                      {/* Show overlap indicator if appointment has overlaps */}
+                      <AppointmentOverlapIndicator
+                        appointment={appointment}
+                        overlappingAppointments={getOverlappingAppointments(appointment)}
+                      />
+                    </div>
+
+                    {/* Timer Controls */}
+                    <div className="ml-auto bg-red-100 p-1 rounded text-xs">
+                      Timer ID: {appointment.id}
+                    </div>
+                    <TimerControls
+                      appointmentId={appointment.id}
+                      compact={true}
+                      className="ml-auto"
+                    />
                   </div>
                 </div>
               </div>

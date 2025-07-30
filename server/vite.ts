@@ -32,8 +32,9 @@ export async function setupVite(app: Express, server: Server) {
     customLogger: {
       ...viteLogger,
       error: (msg, options) => {
+        console.error('❌ Vite error:', msg);
         viteLogger.error(msg, options);
-        process.exit(1);
+        // Don't exit the process on vite errors - just log them
       },
     },
     server: serverOptions,
@@ -43,6 +44,11 @@ export async function setupVite(app: Express, server: Server) {
   app.use(vite.middlewares);
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
+
+    // Skip API routes - let them be handled by the API handlers
+    if (url.startsWith('/api/')) {
+      return next();
+    }
 
     try {
       const clientTemplate = path.resolve(

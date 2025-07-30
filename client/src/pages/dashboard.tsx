@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CalendarCheck, Plus, Search, Download, List, Calendar as CalendarIcon, User } from "lucide-react";
-import ProductivitySidebar from "@/components/productivity-sidebar";
+import { CalendarCheck, Plus, Search, Download, List, Calendar as CalendarIcon, User, Settings } from "lucide-react";
+import ProductivityMetrics from "@/components/productivity-metrics";
 import CalendarView from "@/components/calendar-view";
 import TaskList from "@/components/task-list";
 import AppointmentForm from "@/components/appointment-form";
 import { getTodayString } from "@/lib/date-utils";
+import { Link } from "wouter";
 
 type ViewMode = "month" | "week" | "day";
 
@@ -15,11 +16,7 @@ export default function Dashboard() {
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
-  const [filters, setFilters] = useState({});
 
-  const handleFilterChange = (newFilters: any) => {
-    setFilters(prev => ({ ...prev, ...newFilters }));
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -31,7 +28,13 @@ export default function Dashboard() {
             <h1 className="text-xl font-semibold text-gray-900">Sistema de Agendamento</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <Button 
+            <Link href="/management">
+              <Button variant="outline" className="border-gray-300 hover:bg-gray-50">
+                <Settings className="w-4 h-4 mr-2" />
+                Gerenciar
+              </Button>
+            </Link>
+            <Button
               onClick={() => setShowAppointmentForm(true)}
               className="bg-blue-600 hover:bg-blue-700"
             >
@@ -45,12 +48,12 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="flex pt-16">
-        {/* Sidebar */}
-        <ProductivitySidebar onFilterChange={handleFilterChange} />
-
+      <div className="pt-16">
         {/* Main Content */}
-        <main className="flex-1 p-6">
+        <main className="p-6">
+          {/* Productivity Metrics */}
+          <ProductivityMetrics />
+
           {/* View Toggle and Search */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
@@ -133,7 +136,7 @@ export default function Dashboard() {
 
           {/* Today's Schedule */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <TaskList selectedDate={selectedDate} filters={filters} />
+            <TaskList selectedDate={selectedDate} filters={{}} />
             
             {/* Right Panel - Quick Actions & Summary */}
             <div className="space-y-6">

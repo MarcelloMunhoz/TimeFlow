@@ -4,15 +4,36 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
+import ManagementPage from "@/pages/management";
 import NotFound from "@/pages/not-found";
+import { usePomodoroAutoCompletion } from "@/hooks/use-pomodoro-auto-completion";
+
+// Apply DOM fix patch to prevent removeChild errors
+import "./lib/dom-fix-patch";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/management" component={ManagementPage} />
       <Route component={NotFound} />
     </Switch>
   );
+}
+
+// Component that initializes services inside QueryClientProvider
+function AppServices() {
+  // Initialize Pomodoro auto-completion service
+  usePomodoroAutoCompletion({
+    enabled: true,
+    checkIntervalMinutes: 5, // Check every 5 minutes
+    showToastNotifications: true,
+    onTasksCompleted: (result) => {
+      console.log(`🍅 App: ${result.autoCompletedTasks.length} Pomodoro tasks auto-completed`);
+    }
+  });
+
+  return <Router />;
 }
 
 function App() {
@@ -20,7 +41,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        <AppServices />
       </TooltipProvider>
     </QueryClientProvider>
   );
