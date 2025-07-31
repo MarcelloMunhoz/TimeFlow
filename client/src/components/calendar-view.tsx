@@ -1,12 +1,17 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Clock, CheckCircle } from "lucide-react";
 import { getCalendarDays, formatDate, getTodayString } from "@/lib/date-utils";
 import { format, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, startOfWeek, endOfWeek, eachDayOfInterval } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { ptBR } from "date-fns/locale";
+import {
+  SectionTitle,
+  EnhancedCard,
+  Animated
+} from "@/components/ui/design-system";
 
 interface CalendarViewProps {
   selectedDate: string;
@@ -17,10 +22,17 @@ interface CalendarViewProps {
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 const STATUS_COLORS = {
-  completed: 'bg-green-500',
-  delayed: 'bg-red-500',
-  future: 'bg-blue-500',
-  pomodoro: 'bg-gray-400'
+  completed: 'bg-green-500 border-green-600',
+  delayed: 'bg-red-500 border-red-600',
+  future: 'bg-blue-500 border-blue-600',
+  pomodoro: 'bg-purple-500 border-purple-600'
+};
+
+const STATUS_LIGHT_COLORS = {
+  completed: 'bg-green-100 text-green-700 border-green-200',
+  delayed: 'bg-red-100 text-red-700 border-red-200',
+  future: 'bg-blue-100 text-blue-700 border-blue-200',
+  pomodoro: 'bg-purple-100 text-purple-700 border-purple-200'
 };
 
 export default function CalendarView({ selectedDate, onDateSelect, viewMode }: CalendarViewProps) {
@@ -103,38 +115,43 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
 
   const renderMonthView = () => {
     const calendarDays = getCalendarDays(currentDate);
-    
+
     return (
       <>
-        <div className="grid grid-cols-7 gap-1 mb-2">
+        {/* Enhanced Weekday Headers */}
+        <div className="grid grid-cols-7 gap-1 mb-3">
           {WEEKDAYS.map((day) => (
-            <div key={day} className="p-3 text-center text-sm font-medium text-gray-500">
+            <div key={day} className="p-3 text-center text-sm font-semibold text-muted-foreground bg-muted/30 rounded-lg">
               {day}
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
+        {/* Enhanced Calendar Grid */}
+        <div className="grid grid-cols-7 gap-2">
           {calendarDays.map((day) => {
             const dayAppointments = getAppointmentsForDate(day.dateString);
             const isSelected = selectedDate === day.dateString;
-            
+
             return (
               <div
                 key={day.dateString}
                 className={cn(
-                  "min-h-24 p-2 border border-gray-100 hover:bg-gray-50 cursor-pointer relative",
+                  "min-h-28 p-3 border rounded-xl hover:shadow-md cursor-pointer relative transition-all duration-200 group",
                   {
-                    "bg-blue-50 border-blue-300": isSelected,
-                    "text-gray-400": !day.isCurrentMonth,
-                    "font-bold text-blue-600": day.isToday,
+                    "bg-primary/10 border-primary/30 shadow-md": isSelected,
+                    "bg-card border-border hover:bg-muted/30": !isSelected,
+                    "text-muted-foreground": !day.isCurrentMonth,
+                    "bg-gradient-to-br from-primary/20 to-primary/10 border-primary/40": day.isToday && !isSelected,
+                    "bg-gradient-to-br from-primary/30 to-primary/20 border-primary/50": day.isToday && isSelected,
                   }
                 )}
                 onClick={() => onDateSelect(day.dateString)}
               >
-                <span className={cn("text-sm", {
-                  "font-semibold": day.isCurrentMonth,
-                  "text-blue-600": day.isToday
+                <span className={cn("text-sm font-medium", {
+                  "text-foreground": day.isCurrentMonth,
+                  "text-primary font-bold": day.isToday,
+                  "text-muted-foreground": !day.isCurrentMonth
                 })}>
                   {day.dayNumber}
                 </span>
@@ -290,30 +307,55 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
   };
 
   return (
-    <Card className="mb-6">
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate('prev')}>
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <h2 className="text-xl font-semibold text-gray-900">
-            {getTitle()}
-          </h2>
-          <Button variant="ghost" size="sm" onClick={() => navigate('next')}>
-            <ChevronRight className="w-4 h-4" />
+    <Animated animation="fade">
+      <EnhancedCard variant="elevated" className="overflow-hidden">
+        {/* Enhanced Header */}
+        <div className="flex items-center justify-between p-6 bg-gradient-to-r from-muted/20 to-muted/10 border-b border-border/50">
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('prev')}
+              className="hover:bg-background/80 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Calendar className="w-5 h-5 text-primary" />
+              </div>
+              <SectionTitle className="text-xl">
+                {getTitle()}
+              </SectionTitle>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('next')}
+              className="hover:bg-background/80 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+          <Button
+            variant="outline"
+            onClick={goToToday}
+            className="bg-background/80 hover:bg-background transition-colors"
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Hoje
           </Button>
         </div>
-        <Button variant="ghost" onClick={goToToday}>
-          <Calendar className="w-4 h-4 mr-2" />
-          Hoje
-        </Button>
-      </div>
 
-      <CardContent className="p-4">
-        {viewMode === 'month' && renderMonthView()}
-        {viewMode === 'week' && renderWeekView()}
-        {viewMode === 'day' && renderDayView()}
-      </CardContent>
-    </Card>
+        {/* Enhanced Content */}
+        <div className="p-6">
+          <Animated animation="slide">
+            {viewMode === 'month' && renderMonthView()}
+            {viewMode === 'week' && renderWeekView()}
+            {viewMode === 'day' && renderDayView()}
+          </Animated>
+        </div>
+      </EnhancedCard>
+    </Animated>
   );
 }
