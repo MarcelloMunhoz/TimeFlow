@@ -13,11 +13,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { calculateEndTime, getTodayString } from "@/lib/date-utils";
-import { Info, Save, AlertTriangle } from "lucide-react";
+import { Info, Save, AlertTriangle, Calendar, Clock, Users, Building2, FolderOpen } from "lucide-react";
 import { z } from "zod";
 import SmartTimePicker from "@/components/smart-time-picker";
 import ConflictWarningDialog from "@/components/conflict-warning-dialog";
 import { useConflictCheck } from "@/hooks/use-time-slot-availability";
+import {
+  SectionTitle,
+  EnhancedCard,
+  Animated
+} from "@/components/ui/design-system";
+import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
   title: z.string().min(1, "Título é obrigatório"),
@@ -289,107 +295,154 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       onClose={() => onOpenChange(false)}
       title={isEditing ? "Editar Agendamento" : "Novo Agendamento"}
     >
-      <div className="max-h-[70vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-gray-600">
-            {isEditing ? "Atualize as informações do agendamento" : "Crie um novo agendamento com controle de SLA e Pomodoro automático"}
-          </p>
-          {isEditing && editingAppointment && (
-            <span className="text-sm text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded">
-              ID: {editingAppointment.id}
-            </span>
-          )}
-        </div>
+      <div className="max-h-[75vh] overflow-y-auto">
+        {/* Enhanced Header */}
+        <Animated animation="fade">
+          <div className="flex items-start justify-between mb-6 p-4 bg-muted/20 rounded-lg border border-border/50">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Calendar className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground mb-1">
+                  {isEditing ? "Editar Agendamento" : "Novo Agendamento"}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {isEditing ? "Atualize as informações do agendamento" : "Crie um novo agendamento com controle de SLA e Pomodoro automático"}
+                </p>
+              </div>
+            </div>
+            {isEditing && editingAppointment && (
+              <div className="text-xs text-muted-foreground font-mono bg-muted px-2 py-1 rounded border">
+                ID: {editingAppointment.id}
+              </div>
+            )}
+          </div>
+        </Animated>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Título *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ex: Reunião com cliente" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            {/* Basic Information Section */}
+            <Animated animation="slide">
+              <EnhancedCard variant="bordered" className="bg-card/50">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                    <Calendar className="w-4 h-4 text-primary" />
+                    <h4 className="font-medium text-foreground">Informações Básicas</h4>
+                  </div>
 
-              <div className="md:col-span-2">
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Descrição</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          rows={3}
-                          placeholder="Descreva os detalhes do agendamento..."
-                          {...field}
-                          value={field.value || ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Título *</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Ex: Reunião com cliente"
+                              className="bg-background"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-              <FormField
-                control={form.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Data *</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Descrição</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              rows={3}
+                              placeholder="Descreva os detalhes do agendamento..."
+                              className="bg-background resize-none"
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </EnhancedCard>
+            </Animated>
 
-              <FormField
-                control={form.control}
-                name="startTime"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Hora de Início *</FormLabel>
-                    <FormControl>
-                      <SmartTimePicker
-                        value={field.value}
-                        onChange={field.onChange}
-                        selectedDate={selectedDate}
-                        durationMinutes={durationMinutes}
-                        excludeAppointmentId={editingAppointment?.id}
-                        showAvailabilityHints={true}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                    {conflictCheck.hasConflicts && (
-                      <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-red-800">
-                              Conflito de horário detectado
-                            </p>
-                            <p className="text-xs text-red-600 mt-1">
-                              {conflictCheck.conflictingAppointments.length} agendamento(s) conflitante(s) neste horário
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </FormItem>
-                )}
-              />
+            {/* Date and Time Section */}
+            <Animated animation="slide">
+              <EnhancedCard variant="bordered" className="bg-card/50">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                    <Clock className="w-4 h-4 text-primary" />
+                    <h4 className="font-medium text-foreground">Data e Horário</h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <FormField
+                      control={form.control}
+                      name="date"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Data *</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="date"
+                              className="bg-background"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="startTime"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Hora de Início *</FormLabel>
+                          <FormControl>
+                            <SmartTimePicker
+                              value={field.value}
+                              onChange={field.onChange}
+                              selectedDate={selectedDate}
+                              durationMinutes={durationMinutes}
+                              excludeAppointmentId={editingAppointment?.id}
+                              showAvailabilityHints={true}
+                              className="bg-background"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                          {conflictCheck.hasConflicts && (
+                            <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                              <div className="flex items-start gap-2">
+                                <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-red-800">
+                                    Conflito de horário detectado
+                                  </p>
+                                  <p className="text-xs text-red-600 mt-1">
+                                    {conflictCheck.conflictingAppointments.length} agendamento(s) conflitante(s) neste horário
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </EnhancedCard>
+            </Animated>
 
               <div>
                 <Label>Duração Estimada *</Label>
@@ -483,68 +536,78 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                   Prazo máximo para conclusão (opcional)
                 </p>
               </div>
-              {/* Assignment Fields */}
-              <div className="md:col-span-2 border-t pt-4 mt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Atribuições (Opcional)</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Assignment Section */}
+            <Animated animation="slide">
+              <EnhancedCard variant="bordered" className="bg-card/50">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                    <Users className="w-4 h-4 text-primary" />
+                    <h4 className="font-medium text-foreground">Atribuições</h4>
+                    <span className="text-xs text-muted-foreground">(Opcional)</span>
+                  </div>
 
-                  <FormField
-                    control={form.control}
-                    name="companyId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Empresa</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Selecionar empresa..." />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="none">Nenhuma</SelectItem>
-                            {companies.map((company: any) => (
-                              <SelectItem key={company.id} value={company.id.toString()}>
-                                {company.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="companyId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium flex items-center gap-1">
+                            <Building2 className="w-3 h-3" />
+                            Empresa
+                          </FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger className="bg-background">
+                                <SelectValue placeholder="Selecionar empresa..." />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="none">Nenhuma</SelectItem>
+                              {companies.map((company: any) => (
+                                <SelectItem key={company.id} value={company.id.toString()}>
+                                  {company.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={form.control}
-                    name="projectId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">
-                          Projeto
-                          {selectedCompanyId && selectedCompanyId !== "none" && (
-                            <span className="text-gray-500 font-normal ml-1">
-                              (filtrado por empresa)
-                            </span>
-                          )}
-                        </FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                          disabled={selectedCompanyId && selectedCompanyId !== "none" && filteredProjects.length === 0}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue
-                                placeholder={
-                                  selectedCompanyId && selectedCompanyId !== "none" && filteredProjects.length === 0
-                                    ? "Nenhum projeto disponível"
-                                    : "Selecionar projeto..."
-                                }
-                              />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="none">Nenhum</SelectItem>
+                    <FormField
+                      control={form.control}
+                      name="projectId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium flex items-center gap-1">
+                            <FolderOpen className="w-3 h-3" />
+                            Projeto
+                            {selectedCompanyId && selectedCompanyId !== "none" && (
+                              <span className="text-xs text-muted-foreground font-normal">
+                                (filtrado)
+                              </span>
+                            )}
+                          </FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            disabled={selectedCompanyId && selectedCompanyId !== "none" && filteredProjects.length === 0}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="bg-background">
+                                <SelectValue
+                                  placeholder={
+                                    selectedCompanyId && selectedCompanyId !== "none" && filteredProjects.length === 0
+                                      ? "Nenhum projeto disponível"
+                                      : "Selecionar projeto..."
+                                  }
+                                />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="none">Nenhum</SelectItem>
                             {selectedCompanyId && selectedCompanyId !== "none" ? (
                               // Show only projects from selected company
                               filteredProjects.map((project: any) => (

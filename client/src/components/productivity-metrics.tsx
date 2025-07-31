@@ -125,42 +125,23 @@ export default function ProductivityMetrics() {
 
       {/* Secondary Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-red-50 border-red-200">
-          <CardContent className="p-4">
+          <EnhancedCard
+            variant="elevated"
+            className="bg-gradient-to-br from-red-50 to-red-100/50 border-red-200/50 hover:shadow-lg transition-all duration-300 group"
+          >
             <div className="flex items-center justify-between">
-              <div>
+              <div className="space-y-1">
                 <p className="text-sm font-medium text-red-700">SLA Vencidos</p>
-                <p className="text-2xl font-bold text-red-600">{stats?.slaExpired || 0}</p>
+                <p className="text-3xl font-bold text-red-900">{stats?.slaExpired || 0}</p>
+                <p className="text-xs text-red-600">tarefas atrasadas</p>
               </div>
-              <AlertTriangle className="text-red-600 w-6 h-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-yellow-50 border-yellow-200">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-yellow-700">Reagendamentos</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats?.rescheduled || 0}</p>
+              <div className="p-3 bg-red-200/50 rounded-xl group-hover:scale-110 transition-transform">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
               </div>
-              <TrendingUp className="text-yellow-600 w-6 h-6" />
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-indigo-50 border-indigo-200">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-indigo-700">Próxima Tarefa</p>
-                <p className="text-2xl font-bold text-indigo-600">{stats?.nextTask || getNextTask()}</p>
-              </div>
-              <BarChart3 className="text-indigo-600 w-6 h-6" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </EnhancedCard>
+        </Grid>
+      </Animated>
     </div>
   );
 }

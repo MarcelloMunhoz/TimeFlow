@@ -24,11 +24,20 @@
   --ring: hsl(20, 14.3%, 4.1%);
   --radius: 0.5rem;
 
-  /* Custom colors for appointment status */
-  --completed: hsl(120, 61%, 50%);
+  /* Enhanced appointment status colors */
+  --completed: hsl(142, 76%, 36%);
+  --completed-bg: hsl(142, 76%, 96%);
   --delayed: hsl(0, 84%, 60%);
-  --future: hsl(207, 90%, 54%);
-  --pomodoro: hsl(0, 0%, 62%);
+  --delayed-bg: hsl(0, 84%, 96%);
+  --future: hsl(221, 83%, 53%);
+  --future-bg: hsl(221, 83%, 96%);
+  --pomodoro: hsl(262, 83%, 58%);
+  --pomodoro-bg: hsl(262, 83%, 96%);
+
+  /* Enhanced shadows for depth */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
 .dark {
@@ -71,36 +80,84 @@
   }
 }
 
+@layer components {
+  /* Enhanced card styles */
+  .card-enhanced {
+    @apply bg-card text-card-foreground rounded-xl border shadow-sm hover:shadow-md transition-all duration-200;
+  }
+
+  /* Animation utilities */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+}
+
 @layer utilities {
   .text-completed {
     color: var(--completed);
   }
-  
+
   .text-delayed {
     color: var(--delayed);
   }
-  
+
   .text-future {
     color: var(--future);
   }
-  
+
   .text-pomodoro {
     color: var(--pomodoro);
   }
-  
+
   .bg-completed {
     background-color: var(--completed);
   }
-  
+
   .bg-delayed {
     background-color: var(--delayed);
   }
-  
+
   .bg-future {
     background-color: var(--future);
   }
-  
+
   .bg-pomodoro {
     background-color: var(--pomodoro);
+  }
+
+  .bg-completed-light {
+    background-color: var(--completed-bg);
+  }
+
+  .bg-delayed-light {
+    background-color: var(--delayed-bg);
+  }
+
+  .bg-future-light {
+    background-color: var(--future-bg);
+  }
+
+  .bg-pomodoro-light {
+    background-color: var(--pomodoro-bg);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
