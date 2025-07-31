@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Check, Clock, Edit, Trash2, AlertTriangle, Building2, FolderOpen, User, Repeat, Link } from "lucide-react";
+import { Check, Clock, Edit, Trash2, AlertTriangle, Building2, FolderOpen, User, Repeat, Link, Play, Pause } from "lucide-react";
 import { formatDisplayDate, getAppointmentStatus, isSLAExpired } from "@/lib/date-utils";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,12 @@ import TimerControls from "./timer-controls";
 import AppointmentStatusFilter, { StatusFilter, TimeFilter } from "@/components/appointment-status-filter";
 import { useAppointmentFilters } from "@/hooks/use-appointment-filters";
 import AppointmentOverlapIndicator, { useAppointmentOverlaps } from "@/components/appointment-overlap-indicator";
+import {
+  SectionTitle,
+  EnhancedCard,
+  Animated,
+  LoadingSkeleton
+} from "@/components/ui/design-system";
 
 interface TaskListProps {
   selectedDate: string;
@@ -29,32 +35,36 @@ interface TaskListProps {
 
 const STATUS_CONFIG = {
   completed: {
-    color: 'bg-green-50 border-green-200',
+    color: 'bg-gradient-to-r from-green-50 to-green-100/50 border-green-200/50',
     dotColor: 'bg-green-500',
-    badgeColor: 'bg-green-100 text-green-700',
+    badgeColor: 'bg-green-100 text-green-700 border border-green-200',
     icon: Check,
-    label: 'Concluído'
+    label: 'Concluído',
+    iconColor: 'text-green-600'
   },
   delayed: {
-    color: 'bg-red-50 border-red-200',
+    color: 'bg-gradient-to-r from-red-50 to-red-100/50 border-red-200/50',
     dotColor: 'bg-red-500',
-    badgeColor: 'bg-red-100 text-red-700',
+    badgeColor: 'bg-red-100 text-red-700 border border-red-200',
     icon: AlertTriangle,
-    label: 'SLA Vencido'
+    label: 'SLA Vencido',
+    iconColor: 'text-red-600'
   },
   future: {
-    color: 'bg-white border-gray-200',
+    color: 'bg-gradient-to-r from-blue-50 to-blue-100/50 border-blue-200/50',
     dotColor: 'bg-blue-500',
-    badgeColor: 'bg-blue-100 text-blue-700',
+    badgeColor: 'bg-blue-100 text-blue-700 border border-blue-200',
     icon: Clock,
-    label: 'Agendado'
+    label: 'Agendado',
+    iconColor: 'text-blue-600'
   },
   pomodoro: {
-    color: 'bg-gray-50 border-gray-200',
-    dotColor: 'bg-gray-400',
-    badgeColor: 'bg-gray-100 text-gray-600',
+    color: 'bg-gradient-to-r from-purple-50 to-purple-100/50 border-purple-200/50',
+    dotColor: 'bg-purple-500',
+    badgeColor: 'bg-purple-100 text-purple-700 border border-purple-200',
     icon: Clock,
-    label: 'Pomodoro'
+    label: 'Pomodoro',
+    iconColor: 'text-purple-600'
   }
 };
 
@@ -296,24 +306,41 @@ export default function TaskList({
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Carregando...</CardTitle>
-        </CardHeader>
-      </Card>
+      <EnhancedCard variant="elevated">
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <LoadingSkeleton className="h-6 w-32" />
+          </div>
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <LoadingSkeleton key={i} className="h-20 w-full" />
+            ))}
+          </div>
+        </div>
+      </EnhancedCard>
     );
   }
 
   return (
-    <Card key={`task-list-${selectedDate}-${forceRender}`}>
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold text-gray-900">
-          Agendamentos
-        </CardTitle>
-      </CardHeader>
+    <EnhancedCard
+      key={`task-list-${selectedDate}-${forceRender}`}
+      variant="elevated"
+      className="overflow-hidden"
+    >
+      {/* Enhanced Header */}
+      <div className="px-6 py-4 border-b border-border/50 bg-muted/20">
+        <div className="flex items-center justify-between">
+          <SectionTitle className="text-lg">
+            Agendamentos
+          </SectionTitle>
+          <Badge variant="outline" className="bg-background">
+            {appointments.length} {appointments.length === 1 ? 'item' : 'itens'}
+          </Badge>
+        </div>
+      </div>
 
       {showStatusFilter && (
-        <div className="px-6 pb-4">
+        <div className="px-6 py-4 bg-muted/10 border-b border-border/50">
           <AppointmentStatusFilter
             statusFilter={currentStatusFilter}
             timeFilter={currentTimeFilter}
@@ -324,16 +351,26 @@ export default function TaskList({
         </div>
       )}
 
-      <CardContent className="space-y-3">
+      <div className="p-6 space-y-4">
         {appointments.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            {currentStatusFilter === 'all' && 'Nenhum agendamento encontrado'}
-            {currentStatusFilter === 'open' && 'Nenhum agendamento pendente'}
-            {currentStatusFilter === 'completed' && 'Nenhum agendamento concluído'}
-            {currentTimeFilter === 'day' && ' para este período'}
-            {currentTimeFilter === 'week' && ' para esta semana'}
-            {currentTimeFilter === 'month' && ' para este mês'}
-          </div>
+          <Animated animation="fade">
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-full flex items-center justify-center">
+                <Clock className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium text-foreground mb-2">
+                {currentStatusFilter === 'all' && 'Nenhum agendamento encontrado'}
+                {currentStatusFilter === 'open' && 'Nenhum agendamento pendente'}
+                {currentStatusFilter === 'completed' && 'Nenhum agendamento concluído'}
+              </h3>
+              <p className="text-muted-foreground">
+                {currentTimeFilter === 'day' && 'para este período'}
+                {currentTimeFilter === 'week' && 'para esta semana'}
+                {currentTimeFilter === 'month' && 'para este mês'}
+                {!currentTimeFilter && 'para a data selecionada'}
+              </p>
+            </div>
+          </Animated>
         ) : (
           appointments.map((appointment: any) => {
             const status = getAppointmentStatus(appointment);
@@ -342,134 +379,158 @@ export default function TaskList({
             const slaExpired = isSLAExpired(appointment);
 
             return (
-              <div
-                key={appointment.id}
-                className={cn(
-                  "flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50",
-                  config.color
-                )}
-              >
-                <div className="flex-shrink-0 mt-1">
-                  <div className={cn("w-3 h-3 rounded-full", config.dotColor)} />
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-gray-900">
-                            {appointment.title}
-                          </p>
-                          {appointment.isRecurring && (
-                            <div className="flex items-center gap-1">
-                              <Repeat className="w-3 h-3 text-blue-500" title="Tarefa recorrente" />
-                              <span className="text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">
-                                {appointment.recurrencePattern === 'daily' && 'Diário'}
-                                {appointment.recurrencePattern === 'weekly' && 'Semanal'}
-                                {appointment.recurrencePattern === 'monthly' && 'Mensal'}
-                                {appointment.recurrencePattern === 'yearly' && 'Anual'}
-                              </span>
-                            </div>
-                          )}
-                          {appointment.recurringTaskId && !appointment.isRecurringTemplate && (
-                            <div className="flex items-center gap-1">
-                              <Link className="w-3 h-3 text-green-500" title="Instância de tarefa recorrente" />
-                              <span className="text-xs text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
-                                Instância
-                              </span>
-                            </div>
-                          )}
-                          {appointment.wasRescheduledFromWeekend && (
-                            <span className="text-xs text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded" title="Reagendado do fim de semana">
-                              Reagendado
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-xs text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded ml-2">
-                          ID: {appointment.id}
-                        </span>
-                      </div>
+              <Animated key={appointment.id} animation="slide">
+                <EnhancedCard
+                  variant="interactive"
+                  className={cn(
+                    "group transition-all duration-200 hover:shadow-md hover:-translate-y-0.5",
+                    config.color
+                  )}
+                  padding="md"
+                >
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-shrink-0 mt-1">
+                      <div className={cn(
+                        "w-4 h-4 rounded-full shadow-sm border-2 border-white",
+                        config.dotColor
+                      )} />
+                    </div>
 
-                      {/* Assignment Information */}
-                      <div className="mt-2 space-y-1">
-                        {getCompanyName(appointment) && (
-                          <div className="flex items-center text-xs text-gray-600">
-                            <Building2 className="w-3 h-3 mr-1 text-blue-500" />
-                            <span>{getCompanyName(appointment)}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <h4 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">
+                                {appointment.title}
+                              </h4>
+                              {appointment.isRecurring && (
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                  <Repeat className="w-3 h-3 mr-1" />
+                                  {appointment.recurrencePattern === 'daily' && 'Diário'}
+                                  {appointment.recurrencePattern === 'weekly' && 'Semanal'}
+                                  {appointment.recurrencePattern === 'monthly' && 'Mensal'}
+                                  {appointment.recurrencePattern === 'yearly' && 'Anual'}
+                                </Badge>
+                              )}
+                              {appointment.recurringTaskId && !appointment.isRecurringTemplate && (
+                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                  <Link className="w-3 h-3 mr-1" />
+                                  Instância
+                                </Badge>
+                              )}
+                              {appointment.wasRescheduledFromWeekend && (
+                                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                                  Reagendado
+                                </Badge>
+                              )}
+                            </div>
+                            <Badge variant="outline" className="bg-muted/50 text-muted-foreground border-border/50 font-mono text-xs">
+                              ID: {appointment.id}
+                            </Badge>
                           </div>
-                        )}
-                        {getProjectName(appointment) && (
-                          <div className="flex items-center text-xs text-gray-600">
-                            <FolderOpen className="w-3 h-3 mr-1 text-green-500" />
-                            <span>{getProjectName(appointment)}</span>
+
+                          {/* Enhanced Assignment Information */}
+                          <div className="flex flex-wrap gap-2">
+                            {getCompanyName(appointment) && (
+                              <div className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-md text-xs">
+                                <Building2 className="w-3 h-3" />
+                                <span>{getCompanyName(appointment)}</span>
+                              </div>
+                            )}
+                            {getProjectName(appointment) && (
+                              <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-md text-xs">
+                                <FolderOpen className="w-3 h-3" />
+                                <span>{getProjectName(appointment)}</span>
+                              </div>
+                            )}
+                            {getAssignedUserName(appointment) && (
+                              <div className="flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 rounded-md text-xs">
+                                <User className="w-3 h-3" />
+                                <span>{getAssignedUserName(appointment)}</span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {getAssignedUserName(appointment) && (
-                          <div className="flex items-center text-xs text-gray-600">
-                            <User className="w-3 h-3 mr-1 text-purple-500" />
-                            <span>{getAssignedUserName(appointment)}</span>
-                          </div>
-                        )}
-                        {appointment.peopleWith && (
-                          <p className="text-xs text-gray-500">
-                            Com: {appointment.peopleWith}
-                          </p>
-                        )}
+
+                          {appointment.peopleWith && (
+                            <p className="text-sm text-muted-foreground">
+                              <span className="font-medium">Com:</span> {appointment.peopleWith}
+                            </p>
+                          )}
                       </div>
                     </div>
-                    
-                    <div className="flex items-center space-x-2 ml-4">
-                      {appointment.slaMinutes && (
-                        <Badge variant="outline" className={slaExpired ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>
-                          {slaExpired ? 'SLA Vencido' : `SLA: ${Math.round(appointment.slaMinutes / 60)}h`}
-                        </Badge>
-                      )}
-                      
-                      <div className="flex space-x-1">
-                        {appointment.status !== 'completed' && !appointment.isPomodoro && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="p-1 h-6 w-6"
-                            onClick={() => {
-                              console.log("Marcando como concluído:", appointment.id);
-                              completeTaskMutation.mutate(appointment.id);
-                            }}
-                            disabled={completeTaskMutation.isPending}
-                            title="Marcar como concluído"
-                          >
-                            <Check className="w-3 h-3 text-green-600" />
-                          </Button>
-                        )}
-                        
-                        {appointment.status === 'scheduled' && !appointment.isPomodoro && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="p-1 h-6 w-6"
-                            onClick={() => handleReschedule(appointment)}
-                            disabled={rescheduleTaskMutation.isPending}
-                            title="Reagendar"
-                          >
-                            <Clock className="w-3 h-3 text-gray-600" />
-                          </Button>
-                        )}
-                        
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="p-1 h-6 w-6"
-                          onClick={() => handleEdit(appointment)}
-                          title="Editar"
-                        >
-                          <Edit className="w-3 h-3 text-gray-600" />
-                        </Button>
-                        
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="p-1 h-6 w-6"
+
+                        <div className="flex flex-col items-end space-y-3">
+                          {/* SLA Badge */}
+                          {appointment.slaMinutes && (
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "transition-colors",
+                                slaExpired
+                                  ? 'bg-red-50 text-red-700 border-red-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                              )}
+                            >
+                              {slaExpired ? (
+                                <>
+                                  <AlertTriangle className="w-3 h-3 mr-1" />
+                                  SLA Vencido
+                                </>
+                              ) : (
+                                <>
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  SLA: {Math.round(appointment.slaMinutes / 60)}h
+                                </>
+                              )}
+                            </Badge>
+                          )}
+
+                          {/* Enhanced Action Buttons */}
+                          <div className="flex items-center gap-1">
+                            {appointment.status !== 'completed' && !appointment.isPomodoro && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0 hover:bg-green-50 hover:text-green-600 transition-colors"
+                                onClick={() => {
+                                  console.log("Marcando como concluído:", appointment.id);
+                                  completeTaskMutation.mutate(appointment.id);
+                                }}
+                                disabled={completeTaskMutation.isPending}
+                                title="Marcar como concluído"
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
+                            )}
+
+                            {appointment.status === 'scheduled' && !appointment.isPomodoro && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                onClick={() => handleReschedule(appointment)}
+                                disabled={rescheduleTaskMutation.isPending}
+                                title="Reagendar"
+                              >
+                                <Clock className="w-4 h-4" />
+                              </Button>
+                            )}
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                              onClick={() => handleEdit(appointment)}
+                              title="Editar"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 transition-colors"
                           onClick={() => {
                             console.log(`🗑️ User clicked delete for appointment: ${appointment.id} - "${appointment.title}"`);
 
@@ -521,54 +582,67 @@ export default function TaskList({
                             }
                           }}
                           disabled={deleteTaskMutation.isPending}
-                          title="Excluir tarefa"
-                        >
-                          <Trash2 className={`w-3 h-3 ${deleteTaskMutation.isPending ? 'text-gray-400' : 'text-red-500'}`} />
-                        </Button>
+                              title="Excluir tarefa"
+                            >
+                              <Trash2 className={cn(
+                                "w-4 h-4 transition-colors",
+                                deleteTaskMutation.isPending ? 'text-muted-foreground' : ''
+                              )} />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Enhanced Footer Section */}
+                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/50">
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            <span className="font-medium">{appointment.startTime} - {appointment.endTime}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span>⏱️</span>
+                            <span className="font-medium">
+                              {Math.round((appointment.actualTimeMinutes || 0) / 60 * 10) / 10}h
+                            </span>
+                            <span className="text-muted-foreground/60">
+                              / {Math.round(appointment.durationMinutes / 60 * 10) / 10}h
+                            </span>
+                          </div>
+
+                          {/* Status Badge */}
+                          <Badge
+                            variant={status === 'completed' ? 'default' : 'secondary'}
+                            className={cn("transition-colors", config.badgeColor)}
+                          >
+                            <StatusIcon className="w-3 h-3 mr-1" />
+                            {config.label}
+                          </Badge>
+
+                          {/* Overlap Indicator */}
+                          <AppointmentOverlapIndicator
+                            appointment={appointment}
+                            overlappingAppointments={getOverlappingAppointments(appointment)}
+                          />
+                        </div>
+
+                        {/* Timer Controls */}
+                        <div className="flex items-center gap-2">
+                          <TimerControls
+                            appointmentId={appointment.id}
+                            compact={true}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center space-x-4 text-xs text-gray-500">
-                      <span>
-                        <Clock className="w-3 h-3 inline mr-1" />
-                        {appointment.startTime} - {appointment.endTime}
-                      </span>
-                      <span>
-                        ⏱️ {Math.round((appointment.actualTimeMinutes || 0) / 60 * 10) / 10}h
-                        <span className="text-gray-400 text-xs ml-1">
-                          / {Math.round(appointment.durationMinutes / 60 * 10) / 10}h
-                        </span>
-                      </span>
-                      <Badge variant={status === 'completed' ? 'default' : 'secondary'} className={config.badgeColor}>
-                        <StatusIcon className="w-3 h-3 mr-1" />
-                        {config.label}
-                      </Badge>
-
-                      {/* Show overlap indicator if appointment has overlaps */}
-                      <AppointmentOverlapIndicator
-                        appointment={appointment}
-                        overlappingAppointments={getOverlappingAppointments(appointment)}
-                      />
-                    </div>
-
-                    {/* Timer Controls */}
-                    <div className="ml-auto bg-red-100 p-1 rounded text-xs">
-                      Timer ID: {appointment.id}
-                    </div>
-                    <TimerControls
-                      appointmentId={appointment.id}
-                      compact={true}
-                      className="ml-auto"
-                    />
-                  </div>
-                </div>
-              </div>
+                  </EnhancedCard>
+                </Animated>
             );
           })
         )}
-      </CardContent>
+      </div>
+    </EnhancedCard>
       
       {/* Reschedule Modal */}
       <Dialog open={showRescheduleModal} onOpenChange={setShowRescheduleModal}>
