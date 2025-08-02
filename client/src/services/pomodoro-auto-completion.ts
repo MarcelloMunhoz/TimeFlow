@@ -119,8 +119,9 @@ class PomodoroAutoCompletionService {
       }
     } catch (error) {
       console.error('❌ Error checking for overdue Pomodoro tasks:', error);
-      
-      if (this.onError) {
+
+      // Only call onError for non-network errors to avoid spam
+      if (this.onError && !(error instanceof Error && error.message.includes('fetch'))) {
         this.onError(error instanceof Error ? error : new Error('Unknown error'));
       }
     }

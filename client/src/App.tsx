@@ -27,7 +27,7 @@ function AppServices() {
   usePomodoroAutoCompletion({
     enabled: true,
     checkIntervalMinutes: 5, // Check every 5 minutes
-    showToastNotifications: true,
+    showToastNotifications: false, // Disable toast notifications to reduce spam
     onTasksCompleted: (result) => {
       console.log(`🍅 App: ${result.autoCompletedTasks.length} Pomodoro tasks auto-completed`);
     }

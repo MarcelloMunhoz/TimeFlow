@@ -4,6 +4,8 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
 
+console.log('🚀 SERVIDOR INICIANDO COM CÓDIGO ATUALIZADO - VERSÃO NOVA!');
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -72,6 +74,42 @@ app.use((req, res, next) => {
     await addRecurringFields();
   } catch (error) {
     console.error("Failed to run recurring fields migration on startup:", error);
+  }
+
+  // Run phases tables migration on startup
+  try {
+    const { runPhasesMigration } = await import('./migrations/add-phases-tables.js');
+    await runPhasesMigration();
+  } catch (error) {
+    console.error("Failed to run phases migration on startup:", error);
+  }
+
+  // Run BI project management migration on startup
+  try {
+    await storage.migrateBiProjectManagement();
+  } catch (error) {
+    console.error("Failed to run BI project management migration on startup:", error);
+  }
+
+  // Run subphases migration on startup
+  try {
+    await storage.migrateSubphases();
+  } catch (error) {
+    console.error("Failed to run subphases migration on startup:", error);
+  }
+
+  // Seed subphases on startup
+  try {
+    await storage.seedSubphases();
+  } catch (error) {
+    console.error("Failed to seed subphases on startup:", error);
+  }
+
+  // Seed BI methodology data on startup
+  try {
+    await storage.seedBiMethodology();
+  } catch (error) {
+    console.error("Failed to seed BI methodology data on startup:", error);
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT

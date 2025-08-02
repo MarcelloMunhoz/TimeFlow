@@ -33,6 +33,7 @@ const formSchema = z.object({
   projectId: z.string().optional(),
   companyId: z.string().optional(),
   assignedUserId: z.string().optional(),
+  phaseId: z.string().optional(),
   // Recurring task fields
   isRecurring: z.boolean().default(false),
   recurrencePattern: z.enum(["daily", "weekly", "monthly", "yearly"]).optional(),
@@ -97,6 +98,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       projectId: editingAppointment?.projectId?.toString() || "",
       companyId: editingAppointment?.companyId?.toString() || "",
       assignedUserId: editingAppointment?.assignedUserId?.toString() || "",
+      phaseId: editingAppointment?.phaseId?.toString() || "",
       // Recurring task defaults
       isRecurring: editingAppointment?.isRecurring || false,
       recurrencePattern: editingAppointment?.recurrencePattern || "weekly",
@@ -109,11 +111,23 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
 
   // Watch the selected company to filter projects
   const selectedCompanyId = form.watch("companyId");
+  const selectedProjectId = form.watch("projectId");
 
   // Filter projects based on selected company
   const filteredProjects = selectedCompanyId && selectedCompanyId !== "none"
     ? projects.filter((project: any) => project.companyId === parseInt(selectedCompanyId))
     : projects;
+
+  // Fetch phases for the selected project
+  const { data: projectPhases = [] } = useQuery({
+    queryKey: [`/api/projects/${selectedProjectId}/phases`],
+    queryFn: async () => {
+      if (!selectedProjectId || selectedProjectId === "none") return [];
+      const response = await apiRequest("GET", `/api/projects/${selectedProjectId}/phases`);
+      return response.json();
+    },
+    enabled: !!(selectedProjectId && selectedProjectId !== "none"),
+  });
 
   // Effect to clear project selection when company changes and project doesn't belong to new company
   useEffect(() => {
@@ -130,6 +144,18 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       // If company is set to "none", keep the project selection (show all projects scenario)
     }
   }, [selectedCompanyId, projects, form]);
+
+  // Effect to clear phase selection when project changes
+  useEffect(() => {
+    const currentPhaseId = form.getValues("phaseId");
+    if (currentPhaseId && currentPhaseId !== "none") {
+      // Check if current phase is still available for the selected project
+      const isPhaseAvailable = projectPhases.some((pp: any) => pp.phaseId === parseInt(currentPhaseId));
+      if (!isPhaseAvailable) {
+        form.setValue("phaseId", "none");
+      }
+    }
+  }, [selectedProjectId, projectPhases, form]);
 
   const createAppointmentMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -212,8 +238,8 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
   // Handle proceeding with overlap
   const handleProceedWithOverlap = () => {
     if (pendingSubmission) {
-      // Submit the appointment with overlap
-      submitAppointment(pendingSubmission);
+      // Submit the appointment with overlap allowed
+      submitAppointment({ ...pendingSubmission, allowOverlap: true });
       setPendingSubmission(null);
     }
   };
@@ -226,7 +252,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
   };
 
   // Extract submission logic to reusable function
-  const submitAppointment = ({ values, durationMinutes, slaMinutes }: any) => {
+  const submitAppointment = ({ values, durationMinutes, slaMinutes, allowOverlap = false }: any) => {
     const appointmentData: any = {
       title: values.title,
       description: values.description || null,
@@ -239,10 +265,12 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       slaMinutes: slaMinutes || null,
       isPomodoro: values.isPomodoro || false,
       rescheduleCount: 0,
+      allowOverlap, // Add allowOverlap parameter
       // Assignment fields
       projectId: values.projectId && values.projectId !== "none" ? parseInt(values.projectId) : null,
       companyId: values.companyId && values.companyId !== "none" ? parseInt(values.companyId) : null,
       assignedUserId: values.assignedUserId && values.assignedUserId !== "none" ? parseInt(values.assignedUserId) : null,
+      phaseId: values.phaseId && values.phaseId !== "none" ? parseInt(values.phaseId) : null,
     };
 
     // Add recurring fields if enabled
@@ -280,7 +308,8 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
     }
 
     // No conflicts or user has confirmed overlap, proceed with submission
-    submitAppointment({ values, durationMinutes, slaMinutes });
+    // For editing, always allow overlap to prevent blocking legitimate updates
+    submitAppointment({ values, durationMinutes, slaMinutes, allowOverlap: isEditing });
   };
 
   return (
@@ -289,13 +318,14 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       onClose={() => onOpenChange(false)}
       title={isEditing ? "Editar Agendamento" : "Novo Agendamento"}
     >
-      <div className="max-h-[70vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-gray-600">
+      {/* Removed the inner div with overflow-y-auto to prevent double scrollbars */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <p className="text-gray-600 text-sm leading-relaxed">
             {isEditing ? "Atualize as informações do agendamento" : "Crie um novo agendamento com controle de SLA e Pomodoro automático"}
           </p>
           {isEditing && editingAppointment && (
-            <span className="text-sm text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded">
+            <span className="text-xs text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded flex-shrink-0 ml-4">
               ID: {editingAppointment.id}
             </span>
           )}
@@ -486,7 +516,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
               {/* Assignment Fields */}
               <div className="md:col-span-2 border-t pt-4 mt-4">
                 <h4 className="text-sm font-medium text-gray-700 mb-3">Atribuições (Opcional)</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
                   <FormField
                     control={form.control}
@@ -608,9 +638,70 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                     )}
                   />
 
+                  <FormField
+                    control={form.control}
+                    name="phaseId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">
+                          Fase
+                          {selectedProjectId && selectedProjectId !== "none" && (
+                            <span className="text-gray-500 font-normal ml-1">
+                              (do projeto selecionado)
+                            </span>
+                          )}
+                        </FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          disabled={!selectedProjectId || selectedProjectId === "none" || projectPhases.length === 0}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue
+                                placeholder={
+                                  !selectedProjectId || selectedProjectId === "none"
+                                    ? "Selecione um projeto primeiro"
+                                    : projectPhases.length === 0
+                                    ? "Nenhuma fase disponível"
+                                    : "Selecionar fase..."
+                                }
+                              />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">Nenhuma</SelectItem>
+                            {projectPhases.map((projectPhase: any) => (
+                              <SelectItem key={projectPhase.phaseId} value={projectPhase.phaseId.toString()}>
+                                <div className="flex items-center space-x-2">
+                                  <div
+                                    className="w-3 h-3 rounded-full"
+                                    style={{ backgroundColor: projectPhase.phase.color }}
+                                  />
+                                  <span>{projectPhase.phase.name}</span>
+                                  {projectPhase.deadline && (
+                                    <span className="text-xs text-gray-500">
+                                      (até {new Date(projectPhase.deadline).toLocaleDateString('pt-BR')})
+                                    </span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                        {selectedProjectId && selectedProjectId !== "none" && projectPhases.length === 0 && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            Este projeto não possui fases configuradas
+                          </p>
+                        )}
+                      </FormItem>
+                    )}
+                  />
+
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
-                  Vincule este agendamento a uma empresa, projeto ou pessoa específica.
+                  Vincule este agendamento a uma empresa, projeto, fase ou pessoa específica.
                   {selectedCompanyId && selectedCompanyId !== "none" ? (
                     <span className="block mt-1 text-blue-600">
                       💡 Projetos filtrados pela empresa selecionada

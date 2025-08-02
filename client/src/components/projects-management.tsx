@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { CustomModal } from "@/components/ui/custom-modal";
-import { FolderOpen, Plus, Edit, Trash2, Calendar, Clock, Building2, RefreshCw, Timer } from "lucide-react";
+import ProjectPhasesManagement from "@/components/project-phases-management";
+import { FolderOpen, Plus, Edit, Trash2, Calendar, Clock, Building2, RefreshCw, Timer, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePomodoroManualCheck } from "@/hooks/use-pomodoro-auto-completion";
 
@@ -79,6 +80,8 @@ const statusColors = {
 export default function ProjectsManagement() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [isPhasesModalOpen, setIsPhasesModalOpen] = useState(false);
+  const [selectedProjectForPhases, setSelectedProjectForPhases] = useState<Project | null>(null);
   const [formData, setFormData] = useState<ProjectFormData>({
     name: "",
     description: "",
@@ -200,6 +203,18 @@ export default function ProjectsManagement() {
   const handleNewProject = () => {
     resetForm();
     setIsModalOpen(true);
+  };
+
+  // Handle manage phases
+  const handleManagePhases = (project: Project) => {
+    setSelectedProjectForPhases(project);
+    setIsPhasesModalOpen(true);
+  };
+
+  // Handle phases modal close
+  const handlePhasesModalClose = () => {
+    setSelectedProjectForPhases(null);
+    setIsPhasesModalOpen(false);
   };
 
   // Fetch projects and companies
@@ -540,7 +555,16 @@ export default function ProjectsManagement() {
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => handleManagePhases(project)}
+                  title="Gerenciar Fases"
+                >
+                  <Layers className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => handleEdit(project)}
+                  title="Editar Projeto"
                 >
                   <Edit className="w-4 h-4" />
                 </Button>
@@ -549,6 +573,7 @@ export default function ProjectsManagement() {
                   variant="outline"
                   onClick={() => handleDelete(project.id)}
                   className="text-red-600 hover:text-red-700"
+                  title="Excluir Projeto"
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
@@ -569,6 +594,20 @@ export default function ProjectsManagement() {
           </Button>
         </div>
       )}
+
+      {/* Phases Management Modal */}
+      <CustomModal
+        isOpen={isPhasesModalOpen}
+        onClose={handlePhasesModalClose}
+        title={selectedProjectForPhases ? `Fases do Projeto: ${selectedProjectForPhases.name}` : "Gerenciar Fases"}
+      >
+        {selectedProjectForPhases && (
+          <ProjectPhasesManagement
+            projectId={selectedProjectForPhases.id}
+            projectName={selectedProjectForPhases.name}
+          />
+        )}
+      </CustomModal>
     </div>
   );
 }

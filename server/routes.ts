@@ -5,7 +5,11 @@ import {
   insertAppointmentSchema, updateAppointmentSchema,
   insertCompanySchema, updateCompanySchema,
   insertProjectSchema, updateProjectSchema,
-  insertUserSchema, updateUserSchema
+  insertUserSchema, updateUserSchema,
+  insertPhaseSchema, updatePhaseSchema,
+  insertProjectPhaseSchema, updateProjectPhaseSchema,
+  insertSubphaseSchema, updateSubphaseSchema,
+  insertProjectSubphaseSchema, updateProjectSubphaseSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
@@ -135,14 +139,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create project
+  // Create project (enhanced for BI templates)
   app.post("/api/projects", async (req, res) => {
     try {
       console.log("Received project data:", JSON.stringify(req.body, null, 2));
       const validatedData = insertProjectSchema.parse(req.body);
       console.log("Validated project data:", JSON.stringify(validatedData, null, 2));
+
+      // Create the project
       const project = await storage.createProject(validatedData);
-      res.status(201).json(project);
+      console.log("✅ Project created:", project.id);
+
+      // If a BI template is specified, generate the roadmap automatically
+      if (validatedData.templateId && validatedData.startDate) {
+        try {
+          console.log(`🗺️ Generating roadmap for project ${project.id} using template ${validatedData.templateId}`);
+          const roadmap = await storage.generateProjectRoadmap(
+            project.id,
+            validatedData.templateId,
+            validatedData.startDate
+          );
+          console.log(`✅ Roadmap generated with ${roadmap.length} items`);
+
+          // Update project with first stage as current stage
+          if (roadmap.length > 0) {
+            const firstStage = roadmap.find(item => item.stage_id && !item.main_task_id);
+            if (firstStage) {
+              await storage.updateProject(project.id, {
+                currentStageId: firstStage.stage_id,
+                actualStartDate: validatedData.startDate
+              });
+              console.log(`✅ Project updated with current stage: ${firstStage.stage_id}`);
+            }
+          }
+
+          // Return project with roadmap information
+          res.status(201).json({
+            ...project,
+            roadmapGenerated: true,
+            roadmapItemsCount: roadmap.length
+          });
+        } catch (roadmapError) {
+          console.error("Error generating roadmap:", roadmapError);
+          // Still return the project even if roadmap generation fails
+          res.status(201).json({
+            ...project,
+            roadmapGenerated: false,
+            roadmapError: "Failed to generate roadmap"
+          });
+        }
+      } else {
+        // No template specified, return project as normal
+        res.status(201).json(project);
+      }
     } catch (error) {
       if (error instanceof z.ZodError) {
         console.error("Validation error:", error.errors);
@@ -150,6 +199,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Error creating project:", error);
       res.status(500).json({ message: "Failed to create project" });
+    }
+  });
+
+  // Create BI project with template (specialized endpoint)
+  app.post("/api/projects/bi", async (req, res) => {
+    try {
+      console.log("🚀 Creating BI project with template:", JSON.stringify(req.body, null, 2));
+
+      const { templateId, startDate, ...projectData } = req.body;
+
+      if (!templateId) {
+        return res.status(400).json({ message: "Template ID is required for BI projects" });
+      }
+
+      if (!startDate) {
+        return res.status(400).json({ message: "Start date is required for BI projects" });
+      }
+
+      // Get template information for validation and defaults
+      const template = await storage.getBiProjectTemplate(templateId);
+      if (!template) {
+        return res.status(404).json({ message: "BI template not found" });
+      }
+
+      // Prepare project data with BI defaults
+      const biProjectData = {
+        ...projectData,
+        templateId: parseInt(templateId),
+        biCategory: template.category,
+        startDate,
+        estimatedHours: template.estimated_duration_weeks * 40, // Rough estimate: 40 hours per week
+        riskLevel: template.complexity === 'complex' ? 'high' : template.complexity === 'medium' ? 'medium' : 'low'
+      };
+
+      console.log("📋 BI project data prepared:", JSON.stringify(biProjectData, null, 2));
+
+      // Validate the data
+      const validatedData = insertProjectSchema.parse(biProjectData);
+
+      // Create the project
+      const project = await storage.createProject(validatedData);
+      console.log("✅ BI project created:", project.id);
+
+      // Generate roadmap automatically
+      console.log(`🗺️ Generating roadmap for BI project ${project.id}`);
+      const roadmap = await storage.generateProjectRoadmap(
+        project.id,
+        templateId,
+        startDate
+      );
+      console.log(`✅ Roadmap generated with ${roadmap.length} items`);
+
+      // Update project with first stage as current stage
+      if (roadmap.length > 0) {
+        const firstStage = roadmap.find(item => item.stage_id && !item.main_task_id);
+        if (firstStage) {
+          await storage.updateProject(project.id, {
+            currentStageId: firstStage.stage_id,
+            actualStartDate: startDate
+          });
+          console.log(`✅ BI project updated with current stage: ${firstStage.stage_id}`);
+        }
+      }
+
+      // Return comprehensive response
+      res.status(201).json({
+        project,
+        template,
+        roadmap,
+        summary: {
+          roadmapItemsCount: roadmap.length,
+          estimatedDurationWeeks: template.estimated_duration_weeks,
+          recommendedTeamSize: template.recommended_team_size,
+          complexity: template.complexity
+        }
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        console.error("BI project validation error:", error.errors);
+        return res.status(400).json({ message: "Invalid BI project data", errors: error.errors });
+      }
+      console.error("Error creating BI project:", error);
+      res.status(500).json({ message: "Failed to create BI project" });
     }
   });
 
@@ -333,6 +465,842 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== PHASES ROUTES =====
+
+  // Get all phases
+  app.get("/api/phases", async (req, res) => {
+    try {
+      const phases = await storage.getPhases();
+      res.json(phases);
+    } catch (error) {
+      console.error("Error fetching phases:", error);
+      res.status(500).json({ message: "Failed to fetch phases" });
+    }
+  });
+
+  // Get single phase
+  app.get("/api/phases/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const phase = await storage.getPhase(parseInt(id));
+      if (!phase) {
+        return res.status(404).json({ message: "Phase not found" });
+      }
+      res.json(phase);
+    } catch (error) {
+      console.error("Error fetching phase:", error);
+      res.status(500).json({ message: "Failed to fetch phase" });
+    }
+  });
+
+  // Create phase
+  app.post("/api/phases", async (req, res) => {
+    try {
+      const validatedData = insertPhaseSchema.parse(req.body);
+      const phase = await storage.createPhase(validatedData);
+      res.status(201).json(phase);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid phase data", errors: error.errors });
+      }
+      console.error("Error creating phase:", error);
+      res.status(500).json({ message: "Failed to create phase" });
+    }
+  });
+
+  // Update phase
+  app.patch("/api/phases/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = updatePhaseSchema.parse(req.body);
+      const phase = await storage.updatePhase(parseInt(id), validatedData);
+      if (!phase) {
+        return res.status(404).json({ message: "Phase not found" });
+      }
+      res.json(phase);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid phase data", errors: error.errors });
+      }
+      console.error("Error updating phase:", error);
+      res.status(500).json({ message: "Failed to update phase" });
+    }
+  });
+
+  // Delete phase
+  app.delete("/api/phases/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { force } = req.query;
+
+      let success;
+      if (force === 'true') {
+        console.log(`🗑️ FORCE DELETE requested for phase ${id}`);
+        success = await storage.forceDeletePhase(parseInt(id));
+      } else {
+        success = await storage.deletePhase(parseInt(id));
+      }
+
+      if (!success) {
+        return res.status(404).json({ message: "Phase not found" });
+      }
+      res.json({ message: `Phase ${id} deleted successfully` });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("Cannot delete phase")) {
+        return res.status(400).json({ message: error.message });
+      }
+      console.error("Error deleting phase:", error);
+      res.status(500).json({ message: "Failed to delete phase" });
+    }
+  });
+
+  // Force delete phase (removes all dependencies)
+  app.delete("/api/phases/:id/force", async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log(`🗑️ FORCE DELETE requested for phase ${id}`);
+      const success = await storage.forceDeletePhase(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ message: "Phase not found" });
+      }
+      res.json({ message: `Phase ${id} force deleted successfully` });
+    } catch (error) {
+      console.error("Error force deleting phase:", error);
+      res.status(500).json({ message: "Failed to force delete phase" });
+    }
+  });
+
+  // ===== PROJECT PHASES ROUTES =====
+
+  // Get phases for a project
+  app.get("/api/projects/:projectId/phases", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const projectPhases = await storage.getProjectPhases(parseInt(projectId));
+      res.json(projectPhases);
+    } catch (error) {
+      console.error("Error fetching project phases:", error);
+      res.status(500).json({ message: "Failed to fetch project phases" });
+    }
+  });
+
+  // Add phase to project
+  app.post("/api/projects/:projectId/phases", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const validatedData = insertProjectPhaseSchema.parse({
+        ...req.body,
+        projectId: parseInt(projectId)
+      });
+      const projectPhase = await storage.addPhaseToProject(validatedData);
+      res.status(201).json(projectPhase);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid project phase data", errors: error.errors });
+      }
+      console.error("Error adding phase to project:", error);
+      res.status(500).json({ message: "Failed to add phase to project" });
+    }
+  });
+
+  // Update project phase
+  app.patch("/api/projects/:projectId/phases/:phaseId", async (req, res) => {
+    try {
+      const { projectId, phaseId } = req.params;
+      const validatedData = updateProjectPhaseSchema.parse(req.body);
+      const projectPhase = await storage.updateProjectPhase(parseInt(projectId), parseInt(phaseId), validatedData);
+      if (!projectPhase) {
+        return res.status(404).json({ message: "Project phase not found" });
+      }
+      res.json(projectPhase);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid project phase data", errors: error.errors });
+      }
+      console.error("Error updating project phase:", error);
+      res.status(500).json({ message: "Failed to update project phase" });
+    }
+  });
+
+  // Remove phase from project
+  app.delete("/api/projects/:projectId/phases/:phaseId", async (req, res) => {
+    try {
+      const { projectId, phaseId } = req.params;
+      const success = await storage.removePhaseFromProject(parseInt(projectId), parseInt(phaseId));
+      if (!success) {
+        return res.status(404).json({ message: "Project phase not found" });
+      }
+      res.json({ message: "Phase removed from project successfully" });
+    } catch (error) {
+      console.error("Error removing phase from project:", error);
+      res.status(500).json({ message: "Failed to remove phase from project" });
+    }
+  });
+
+  // ===== SUBPHASES ROUTES =====
+
+  // Get all subphases (optionally filtered by phase)
+  app.get("/api/subphases", async (req, res) => {
+    try {
+      const { phaseId } = req.query;
+      const subphases = await storage.getSubphases(phaseId ? parseInt(phaseId as string) : undefined);
+      res.json(subphases);
+    } catch (error) {
+      console.error("Error fetching subphases:", error);
+      res.status(500).json({ message: "Failed to fetch subphases" });
+    }
+  });
+
+  // Get subphases for a specific phase
+  app.get("/api/phases/:phaseId/subphases", async (req, res) => {
+    try {
+      const { phaseId } = req.params;
+      const subphases = await storage.getSubphases(parseInt(phaseId));
+      res.json(subphases);
+    } catch (error) {
+      console.error("Error fetching phase subphases:", error);
+      res.status(500).json({ message: "Failed to fetch phase subphases" });
+    }
+  });
+
+  // Get single subphase
+  app.get("/api/subphases/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const subphase = await storage.getSubphase(parseInt(id));
+      if (!subphase) {
+        return res.status(404).json({ message: "Subphase not found" });
+      }
+      res.json(subphase);
+    } catch (error) {
+      console.error("Error fetching subphase:", error);
+      res.status(500).json({ message: "Failed to fetch subphase" });
+    }
+  });
+
+  // Create subphase
+  app.post("/api/subphases", async (req, res) => {
+    try {
+      const validatedData = insertSubphaseSchema.parse(req.body);
+      const subphase = await storage.createSubphase(validatedData);
+      res.status(201).json(subphase);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid subphase data", errors: error.errors });
+      }
+      console.error("Error creating subphase:", error);
+      res.status(500).json({ message: "Failed to create subphase" });
+    }
+  });
+
+  // Update subphase
+  app.patch("/api/subphases/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = updateSubphaseSchema.parse(req.body);
+      const subphase = await storage.updateSubphase(parseInt(id), validatedData);
+      if (!subphase) {
+        return res.status(404).json({ message: "Subphase not found" });
+      }
+      res.json(subphase);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid subphase data", errors: error.errors });
+      }
+      console.error("Error updating subphase:", error);
+      res.status(500).json({ message: "Failed to update subphase" });
+    }
+  });
+
+  // Delete subphase
+  app.delete("/api/subphases/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteSubphase(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ message: "Subphase not found" });
+      }
+      res.json({ message: "Subphase deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting subphase:", error);
+      // Return specific error message if available
+      if (error instanceof Error && error.message.includes("Cannot delete")) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to delete subphase" });
+    }
+  });
+
+  // ===== PROJECT SUBPHASES ROUTES =====
+
+  // Get subphases for a project phase
+  app.get("/api/project-phases/:projectPhaseId/subphases", async (req, res) => {
+    try {
+      const { projectPhaseId } = req.params;
+      const projectSubphases = await storage.getProjectSubphases(parseInt(projectPhaseId));
+      res.json(projectSubphases);
+    } catch (error) {
+      console.error("Error fetching project subphases:", error);
+      res.status(500).json({ message: "Failed to fetch project subphases" });
+    }
+  });
+
+  // Get single project subphase
+  app.get("/api/project-subphases/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const projectSubphase = await storage.getProjectSubphase(parseInt(id));
+      if (!projectSubphase) {
+        return res.status(404).json({ message: "Project subphase not found" });
+      }
+      res.json(projectSubphase);
+    } catch (error) {
+      console.error("Error fetching project subphase:", error);
+      res.status(500).json({ message: "Failed to fetch project subphase" });
+    }
+  });
+
+  // Add subphase to project phase
+  app.post("/api/project-phases/:projectPhaseId/subphases", async (req, res) => {
+    try {
+      const { projectPhaseId } = req.params;
+      const validatedData = insertProjectSubphaseSchema.parse({
+        ...req.body,
+        projectPhaseId: parseInt(projectPhaseId)
+      });
+      const projectSubphase = await storage.createProjectSubphase(validatedData);
+
+      // Update phase progress after adding subphase
+      await storage.updatePhaseProgress(parseInt(projectPhaseId));
+
+      res.status(201).json(projectSubphase);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid project subphase data", errors: error.errors });
+      }
+      console.error("Error creating project subphase:", error);
+      res.status(500).json({ message: "Failed to create project subphase" });
+    }
+  });
+
+  // Update project subphase
+  app.patch("/api/project-subphases/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = updateProjectSubphaseSchema.parse(req.body);
+      const projectSubphase = await storage.updateProjectSubphase(parseInt(id), validatedData);
+      if (!projectSubphase) {
+        return res.status(404).json({ message: "Project subphase not found" });
+      }
+
+      // Update phase progress after updating subphase
+      await storage.updatePhaseProgress(projectSubphase.project_phase_id);
+
+      // Sync project timeline if dates were updated
+      if (validatedData.startDate || validatedData.endDate) {
+        const projectPhase = await db.execute(`SELECT project_id FROM project_phases WHERE id = ?` as any, [projectSubphase.project_phase_id]);
+        const projectId = (projectPhase as any).rows[0]?.project_id;
+        if (projectId) {
+          await storage.syncProjectTimeline(projectId);
+        }
+      }
+
+      res.json(projectSubphase);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid project subphase data", errors: error.errors });
+      }
+      console.error("Error updating project subphase:", error);
+      res.status(500).json({ message: "Failed to update project subphase" });
+    }
+  });
+
+  // Delete project subphase
+  app.delete("/api/project-subphases/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get project phase ID before deletion for progress update
+      const projectSubphase = await storage.getProjectSubphase(parseInt(id));
+      if (!projectSubphase) {
+        return res.status(404).json({ message: "Project subphase not found" });
+      }
+
+      const success = await storage.deleteProjectSubphase(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ message: "Project subphase not found" });
+      }
+
+      // Update phase progress after removing subphase
+      await storage.updatePhaseProgress(projectSubphase.project_phase_id);
+
+      res.json({ message: "Project subphase deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting project subphase:", error);
+      res.status(500).json({ message: "Failed to delete project subphase" });
+    }
+  });
+
+  // Sync project timeline
+  app.post("/api/projects/:projectId/sync-timeline", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      await storage.syncProjectTimeline(parseInt(projectId));
+      res.json({ message: "Project timeline synchronized successfully" });
+    } catch (error) {
+      console.error("Error syncing project timeline:", error);
+      res.status(500).json({ message: "Failed to sync project timeline" });
+    }
+  });
+
+  // BI Stages endpoints
+  app.get("/api/bi/stages", async (req, res) => {
+    try {
+      const stages = await storage.getBiStages();
+      res.json(stages);
+    } catch (error) {
+      console.error("Error fetching BI stages:", error);
+      res.status(500).json({ message: "Failed to fetch BI stages" });
+    }
+  });
+
+  app.get("/api/bi/stages/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const stage = await storage.getBiStage(parseInt(id));
+      if (!stage) {
+        return res.status(404).json({ message: "BI stage not found" });
+      }
+      res.json(stage);
+    } catch (error) {
+      console.error("Error fetching BI stage:", error);
+      res.status(500).json({ message: "Failed to fetch BI stage" });
+    }
+  });
+
+  // BI Project Templates endpoints
+  app.get("/api/bi/templates", async (req, res) => {
+    try {
+      const templates = await storage.getBiProjectTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching BI templates:", error);
+      res.status(500).json({ message: "Failed to fetch BI templates" });
+    }
+  });
+
+  app.get("/api/bi/templates/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const template = await storage.getBiProjectTemplate(parseInt(id));
+      if (!template) {
+        return res.status(404).json({ message: "BI template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Error fetching BI template:", error);
+      res.status(500).json({ message: "Failed to fetch BI template" });
+    }
+  });
+
+  app.post("/api/bi/templates", async (req, res) => {
+    try {
+      const template = await storage.createBiProjectTemplate(req.body);
+      res.status(201).json(template);
+    } catch (error) {
+      console.error("Error creating BI template:", error);
+      res.status(500).json({ message: "Failed to create BI template" });
+    }
+  });
+
+  app.put("/api/bi/templates/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const template = await storage.updateBiProjectTemplate(parseInt(id), req.body);
+      if (!template) {
+        return res.status(404).json({ message: "BI template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Error updating BI template:", error);
+      res.status(500).json({ message: "Failed to update BI template" });
+    }
+  });
+
+  app.delete("/api/bi/templates/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteBiProjectTemplate(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ message: "BI template not found" });
+      }
+      res.json({ message: "BI template deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting BI template:", error);
+      res.status(500).json({ message: "Failed to delete BI template" });
+    }
+  });
+
+  // BI Template Stages endpoints
+  app.get("/api/bi/templates/:id/stages", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const stages = await storage.getTemplateStages(parseInt(id));
+      res.json(stages);
+    } catch (error) {
+      console.error("Error fetching template stages:", error);
+      res.status(500).json({ message: "Failed to fetch template stages" });
+    }
+  });
+
+  app.post("/api/bi/templates/:templateId/stages/:stageId", async (req, res) => {
+    try {
+      const { templateId, stageId } = req.params;
+      const { orderIndex, isOptional, customDurationDays } = req.body;
+      const templateStage = await storage.addStageToTemplate(
+        parseInt(templateId),
+        parseInt(stageId),
+        orderIndex,
+        isOptional,
+        customDurationDays
+      );
+      res.status(201).json(templateStage);
+    } catch (error) {
+      console.error("Error adding stage to template:", error);
+      res.status(500).json({ message: "Failed to add stage to template" });
+    }
+  });
+
+  app.put("/api/bi/templates/:templateId/stages/:stageId", async (req, res) => {
+    try {
+      const { templateId, stageId } = req.params;
+      const templateStage = await storage.updateTemplateStage(
+        parseInt(templateId),
+        parseInt(stageId),
+        req.body
+      );
+      if (!templateStage) {
+        return res.status(404).json({ message: "Template stage not found" });
+      }
+      res.json(templateStage);
+    } catch (error) {
+      console.error("Error updating template stage:", error);
+      res.status(500).json({ message: "Failed to update template stage" });
+    }
+  });
+
+  app.delete("/api/bi/templates/:templateId/stages/:stageId", async (req, res) => {
+    try {
+      const { templateId, stageId } = req.params;
+      const success = await storage.removeStageFromTemplate(
+        parseInt(templateId),
+        parseInt(stageId)
+      );
+      if (!success) {
+        return res.status(404).json({ message: "Template stage not found" });
+      }
+      res.json({ message: "Stage removed from template successfully" });
+    } catch (error) {
+      console.error("Error removing stage from template:", error);
+      res.status(500).json({ message: "Failed to remove stage from template" });
+    }
+  });
+
+  // Get BI templates with detailed information for project creation
+  app.get("/api/bi/templates/detailed", async (req, res) => {
+    try {
+      const templates = await storage.getBiProjectTemplates();
+
+      // Enhance each template with stage information
+      const detailedTemplates = await Promise.all(
+        templates.map(async (template) => {
+          const stages = await storage.getTemplateStages(template.id);
+          const stageCount = stages.length;
+
+          return {
+            ...template,
+            stageCount,
+            stages: stages.map(stage => ({
+              id: stage.stage_id,
+              name: stage.stage_name,
+              description: stage.stage_description,
+              color: stage.stage_color,
+              orderIndex: stage.order_index,
+              isOptional: stage.is_optional,
+              customDurationDays: stage.custom_duration_days
+            }))
+          };
+        })
+      );
+
+      res.json(detailedTemplates);
+    } catch (error) {
+      console.error("Error fetching detailed BI templates:", error);
+      res.status(500).json({ message: "Failed to fetch detailed BI templates" });
+    }
+  });
+
+  // BI Main Tasks endpoints
+  app.get("/api/bi/main-tasks", async (req, res) => {
+    try {
+      const { stageId } = req.query;
+      const tasks = await storage.getBiMainTasks(stageId ? parseInt(stageId as string) : undefined);
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error fetching BI main tasks:", error);
+      res.status(500).json({ message: "Failed to fetch BI main tasks" });
+    }
+  });
+
+  app.get("/api/bi/main-tasks/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const task = await storage.getBiMainTask(parseInt(id));
+      if (!task) {
+        return res.status(404).json({ message: "BI main task not found" });
+      }
+      res.json(task);
+    } catch (error) {
+      console.error("Error fetching BI main task:", error);
+      res.status(500).json({ message: "Failed to fetch BI main task" });
+    }
+  });
+
+  app.post("/api/bi/main-tasks", async (req, res) => {
+    try {
+      const task = await storage.createBiMainTask(req.body);
+      res.status(201).json(task);
+    } catch (error) {
+      console.error("Error creating BI main task:", error);
+      res.status(500).json({ message: "Failed to create BI main task" });
+    }
+  });
+
+  app.put("/api/bi/main-tasks/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const task = await storage.updateBiMainTask(parseInt(id), req.body);
+      if (!task) {
+        return res.status(404).json({ message: "BI main task not found" });
+      }
+      res.json(task);
+    } catch (error) {
+      console.error("Error updating BI main task:", error);
+      res.status(500).json({ message: "Failed to update BI main task" });
+    }
+  });
+
+  app.delete("/api/bi/main-tasks/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteBiMainTask(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ message: "BI main task not found" });
+      }
+      res.json({ message: "BI main task deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting BI main task:", error);
+      res.status(500).json({ message: "Failed to delete BI main task" });
+    }
+  });
+
+  // BI Subtasks endpoints
+  app.get("/api/bi/subtasks", async (req, res) => {
+    try {
+      const { mainTaskId } = req.query;
+      const subtasks = await storage.getBiSubtasks(mainTaskId ? parseInt(mainTaskId as string) : undefined);
+      res.json(subtasks);
+    } catch (error) {
+      console.error("Error fetching BI subtasks:", error);
+      res.status(500).json({ message: "Failed to fetch BI subtasks" });
+    }
+  });
+
+  app.get("/api/bi/subtasks/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const subtask = await storage.getBiSubtask(parseInt(id));
+      if (!subtask) {
+        return res.status(404).json({ message: "BI subtask not found" });
+      }
+      res.json(subtask);
+    } catch (error) {
+      console.error("Error fetching BI subtask:", error);
+      res.status(500).json({ message: "Failed to fetch BI subtask" });
+    }
+  });
+
+  app.post("/api/bi/subtasks", async (req, res) => {
+    try {
+      const subtask = await storage.createBiSubtask(req.body);
+      res.status(201).json(subtask);
+    } catch (error) {
+      console.error("Error creating BI subtask:", error);
+      res.status(500).json({ message: "Failed to create BI subtask" });
+    }
+  });
+
+  app.put("/api/bi/subtasks/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const subtask = await storage.updateBiSubtask(parseInt(id), req.body);
+      if (!subtask) {
+        return res.status(404).json({ message: "BI subtask not found" });
+      }
+      res.json(subtask);
+    } catch (error) {
+      console.error("Error updating BI subtask:", error);
+      res.status(500).json({ message: "Failed to update BI subtask" });
+    }
+  });
+
+  app.delete("/api/bi/subtasks/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteBiSubtask(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ message: "BI subtask not found" });
+      }
+      res.json({ message: "BI subtask deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting BI subtask:", error);
+      res.status(500).json({ message: "Failed to delete BI subtask" });
+    }
+  });
+
+  // Project Roadmap endpoints
+  app.get("/api/projects/:projectId/roadmap", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const roadmap = await storage.getProjectRoadmap(parseInt(projectId));
+      res.json(roadmap);
+    } catch (error) {
+      console.error("Error fetching project roadmap:", error);
+      res.status(500).json({ message: "Failed to fetch project roadmap" });
+    }
+  });
+
+  app.post("/api/projects/:projectId/roadmap/generate", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const { templateId, startDate } = req.body;
+
+      if (!templateId || !startDate) {
+        return res.status(400).json({ message: "Template ID and start date are required" });
+      }
+
+      const roadmap = await storage.generateProjectRoadmap(
+        parseInt(projectId),
+        parseInt(templateId),
+        startDate
+      );
+      res.status(201).json(roadmap);
+    } catch (error) {
+      console.error("Error generating project roadmap:", error);
+      res.status(500).json({ message: "Failed to generate project roadmap" });
+    }
+  });
+
+  app.post("/api/roadmap", async (req, res) => {
+    try {
+      const item = await storage.createRoadmapItem(req.body);
+      res.status(201).json(item);
+    } catch (error) {
+      console.error("Error creating roadmap item:", error);
+      res.status(500).json({ message: "Failed to create roadmap item" });
+    }
+  });
+
+  app.put("/api/roadmap/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const item = await storage.updateRoadmapItem(parseInt(id), req.body);
+      if (!item) {
+        return res.status(404).json({ message: "Roadmap item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error("Error updating roadmap item:", error);
+      res.status(500).json({ message: "Failed to update roadmap item" });
+    }
+  });
+
+  app.delete("/api/roadmap/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteRoadmapItem(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ message: "Roadmap item not found" });
+      }
+      res.json({ message: "Roadmap item deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting roadmap item:", error);
+      res.status(500).json({ message: "Failed to delete roadmap item" });
+    }
+  });
+
+  // Get project BI status and progress
+  app.get("/api/projects/:projectId/bi-status", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const project = await storage.getProject(parseInt(projectId));
+
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      let biStatus = {
+        project,
+        isBiProject: !!project.templateId,
+        template: null,
+        currentStage: null,
+        roadmap: [],
+        progress: {
+          overallPercentage: project.progressPercentage || 0,
+          completedStages: 0,
+          totalStages: 0,
+          completedTasks: 0,
+          totalTasks: 0
+        }
+      };
+
+      // If it's a BI project, get additional details
+      if (project.templateId) {
+        // Get template information
+        biStatus.template = await storage.getBiProjectTemplate(project.templateId);
+
+        // Get current stage information
+        if (project.currentStageId) {
+          biStatus.currentStage = await storage.getBiStage(project.currentStageId);
+        }
+
+        // Get roadmap
+        biStatus.roadmap = await storage.getProjectRoadmap(parseInt(projectId));
+
+        // Calculate progress
+        const roadmapItems = biStatus.roadmap;
+        const stageItems = roadmapItems.filter(item => item.stage_id && !item.main_task_id);
+        const taskItems = roadmapItems.filter(item => item.main_task_id);
+
+        biStatus.progress.totalStages = stageItems.length;
+        biStatus.progress.completedStages = stageItems.filter(item => item.status === 'completed').length;
+        biStatus.progress.totalTasks = taskItems.length;
+        biStatus.progress.completedTasks = taskItems.filter(item => item.status === 'completed').length;
+
+        // Calculate overall percentage if not set
+        if (!biStatus.progress.overallPercentage && roadmapItems.length > 0) {
+          const completedItems = roadmapItems.filter(item => item.status === 'completed').length;
+          biStatus.progress.overallPercentage = Math.round((completedItems / roadmapItems.length) * 100);
+        }
+      }
+
+      res.json(biStatus);
+    } catch (error) {
+      console.error("Error fetching project BI status:", error);
+      res.status(500).json({ message: "Failed to fetch project BI status" });
+    }
+  });
+
   // ===== APPOINTMENTS ROUTES =====
 
   // Get all appointments
@@ -412,6 +1380,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create appointment
   app.post("/api/appointments", async (req, res) => {
     try {
+      console.log(`🔍 ROTA - Recebendo requisição para criar agendamento:`, req.body);
+
+      // VALIDAÇÃO CORRIGIDA DE FINAL DE SEMANA NA ROTA
+      if (req.body.date) {
+        // Usar uma abordagem que evita problemas de fuso horário
+        const dateStr = req.body.date;
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const appointmentDate = new Date(year, month - 1, day); // month - 1 porque JavaScript usa 0-11
+        const dayOfWeek = appointmentDate.getDay();
+
+        console.log(`🔍 ROTA - Validando data: ${dateStr} = dia da semana ${dayOfWeek}`);
+        console.log(`🔍 ROTA - Data criada: ${appointmentDate.toDateString()}`);
+
+        if (dayOfWeek === 6) {
+          console.log(`❌ ROTA - DETECTADO SÁBADO - Verificando se é encaixe`);
+          // Verificar se o usuário explicitamente permitiu encaixe
+          if (!req.body.allowWeekendOverride) {
+            return res.status(422).json({
+              message: "Sábado não é um dia útil. Deseja fazer um ENCAIXE mesmo assim?",
+              code: "WEEKEND_CONFIRMATION_NEEDED",
+              dayType: "SÁBADO"
+            });
+          }
+          console.log(`✅ ROTA - ENCAIXE AUTORIZADO para SÁBADO`);
+        }
+
+        if (dayOfWeek === 0) {
+          console.log(`❌ ROTA - DETECTADO DOMINGO - Verificando se é encaixe`);
+          // Verificar se o usuário explicitamente permitiu encaixe
+          if (!req.body.allowWeekendOverride) {
+            return res.status(422).json({
+              message: "Domingo não é um dia útil. Deseja fazer um ENCAIXE mesmo assim?",
+              code: "WEEKEND_CONFIRMATION_NEEDED",
+              dayType: "DOMINGO"
+            });
+          }
+          console.log(`✅ ROTA - ENCAIXE AUTORIZADO para DOMINGO`);
+        }
+
+        console.log(`✅ ROTA - Dia útil aprovado: ${dayOfWeek}`);
+      }
+
       const validatedData = insertAppointmentSchema.parse(req.body);
       const appointment = await storage.createAppointment(validatedData);
       res.status(201).json(appointment);
@@ -771,6 +1781,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true, message: 'Test endpoint working!' });
   });
 
+  // Debug endpoint to check which phases are in use
+  app.get("/api/debug/phases-in-use", async (req, res) => {
+    try {
+      console.log("🔍 DEBUG: Checking which phases are in use...");
+
+      // Get all project phases
+      const projectPhases = await storage.getAllProjectPhases();
+      console.log(`Found ${projectPhases.length} project-phase associations`);
+
+      // Get all appointments with phases
+      const appointmentsWithPhases = await storage.getAppointmentsWithPhases();
+      console.log(`Found ${appointmentsWithPhases.length} appointments with phases`);
+
+      // Extract unique phase IDs
+      const phaseIdsInProjects = [...new Set(projectPhases.map(pp => pp.phaseId))];
+      const phaseIdsInAppointments = [...new Set(appointmentsWithPhases.map(a => a.phaseId).filter(id => id !== null))];
+      const allPhaseIdsInUse = [...new Set([...phaseIdsInProjects, ...phaseIdsInAppointments])];
+
+      res.json({
+        success: true,
+        data: {
+          projectPhases: projectPhases.length,
+          appointmentsWithPhases: appointmentsWithPhases.length,
+          phaseIdsInProjects,
+          phaseIdsInAppointments,
+          allPhaseIdsInUse,
+          summary: {
+            totalPhasesInUse: allPhaseIdsInUse.length,
+            phasesInProjects: phaseIdsInProjects.length,
+            phasesInAppointments: phaseIdsInAppointments.length
+          }
+        }
+      });
+    } catch (error) {
+      console.error("Error in debug phases-in-use:", error);
+      res.status(500).json({ message: "Debug endpoint failed", error: error.message });
+    }
+  });
+
+  // Remove phase from project
+  app.delete("/api/projects/:projectId/phases/:phaseId", async (req, res) => {
+    try {
+      const { projectId, phaseId } = req.params;
+      console.log(`🗑️ Removing phase ${phaseId} from project ${projectId}`);
+
+      const success = await storage.removePhaseFromProject(parseInt(projectId), parseInt(phaseId));
+      if (!success) {
+        return res.status(404).json({ message: "Project phase association not found" });
+      }
+
+      res.json({ message: "Phase removed from project successfully" });
+    } catch (error) {
+      console.error("Error removing phase from project:", error);
+      res.status(500).json({ message: "Failed to remove phase from project" });
+    }
+  });
+
+  // Clear phase from all appointments
+  app.post("/api/phases/:phaseId/clear-appointments", async (req, res) => {
+    try {
+      const { phaseId } = req.params;
+      console.log(`🧹 Clearing phase ${phaseId} from all appointments`);
+
+      const count = await storage.clearPhaseFromAppointments(parseInt(phaseId));
+
+      res.json({
+        message: `Phase cleared from ${count} appointments successfully`,
+        clearedCount: count
+      });
+    } catch (error) {
+      console.error("Error clearing phase from appointments:", error);
+      res.status(500).json({ message: "Failed to clear phase from appointments" });
+    }
+  });
+
+  // Complete cleanup of phases - removes all associations and then deletes the phases
+  app.post("/api/phases/complete-cleanup", async (req, res) => {
+    try {
+      console.log(`🧹 Starting complete phase cleanup...`);
+
+      const result = await storage.completePhaseCleanup();
+
+      res.json({
+        message: "Complete phase cleanup completed successfully",
+        result
+      });
+    } catch (error) {
+      console.error("Error in complete phase cleanup:", error);
+      res.status(500).json({ message: "Failed to complete phase cleanup" });
+    }
+  });
+
+  // Nuclear option - direct SQL deletion of specific phases
+  app.post("/api/phases/nuclear-delete", async (req, res) => {
+    try {
+      const { phaseIds } = req.body;
+      console.log(`💥 NUCLEAR DELETE requested for phases: ${phaseIds.join(', ')}`);
+
+      const result = await storage.nuclearDeletePhases(phaseIds);
+
+      res.json({
+        message: "Nuclear deletion completed successfully",
+        result
+      });
+    } catch (error) {
+      console.error("Error in nuclear deletion:", error);
+      res.status(500).json({ message: "Failed to perform nuclear deletion" });
+    }
+  });
+
   // Enhancement 2: Auto-complete overdue Pomodoro tasks
   console.log('📝 Registering auto-complete-pomodoros endpoint: POST /api/appointments/auto-complete-pomodoros');
   app.post('/api/appointments/auto-complete-pomodoros', async (req, res) => {
@@ -803,8 +1923,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const pomodoro of overduePomodoros) {
         try {
-          // Parse start time and calculate end time
-          const [startHours, startMinutes] = pomodoro.startTime.split(':').map(Number);
+          // Validate required fields
+          if (!pomodoro.startTime || !pomodoro.durationMinutes) {
+            console.log(`⚠️ Skipping Pomodoro "${pomodoro.title}" - missing startTime or durationMinutes`);
+            continue;
+          }
+
+          // Parse start time and calculate end time with error handling
+          const timeParts = pomodoro.startTime.split(':');
+          if (timeParts.length !== 2) {
+            console.log(`⚠️ Skipping Pomodoro "${pomodoro.title}" - invalid time format: ${pomodoro.startTime}`);
+            continue;
+          }
+
+          const [startHours, startMinutes] = timeParts.map(Number);
+          if (isNaN(startHours) || isNaN(startMinutes) || startHours < 0 || startHours > 23 || startMinutes < 0 || startMinutes > 59) {
+            console.log(`⚠️ Skipping Pomodoro "${pomodoro.title}" - invalid time values: ${pomodoro.startTime}`);
+            continue;
+          }
+
           const startTimeMinutes = startHours * 60 + startMinutes;
           const endTimeMinutes = startTimeMinutes + pomodoro.durationMinutes;
 
@@ -1326,6 +2463,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Project hours migration error:", error);
       res.status(500).json({ error: "Project hours migration failed", details: error.message });
+    }
+  });
+
+  // ===== WORK SCHEDULE ROUTES =====
+
+  // Get all work schedules
+  app.get("/api/work-schedules", async (req, res) => {
+    try {
+      const workSchedules = await storage.getWorkSchedules();
+      res.json(workSchedules);
+    } catch (error) {
+      console.error("Error fetching work schedules:", error);
+      res.status(500).json({ message: "Failed to fetch work schedules" });
+    }
+  });
+
+  // Get user's work schedule with rules
+  app.get("/api/users/:userId/work-schedule", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const workSchedule = await storage.getUserWorkSchedule(parseInt(userId));
+      if (!workSchedule) {
+        return res.status(404).json({ message: "Work schedule not found" });
+      }
+      res.json(workSchedule);
+    } catch (error) {
+      console.error("Error fetching user work schedule:", error);
+      res.status(500).json({ message: "Failed to fetch work schedule" });
+    }
+  });
+
+  // Create work schedule
+  app.post("/api/work-schedules", async (req, res) => {
+    try {
+      const { insertWorkScheduleSchema } = await import('../shared/schema.js');
+      const validatedData = insertWorkScheduleSchema.parse(req.body);
+      const workSchedule = await storage.createWorkSchedule(validatedData);
+      res.status(201).json(workSchedule);
+    } catch (error) {
+      console.error("Error creating work schedule:", error);
+      res.status(500).json({ message: "Failed to create work schedule" });
+    }
+  });
+
+  // Update work schedule
+  app.patch("/api/work-schedules/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { updateWorkScheduleSchema } = await import('../shared/schema.js');
+      const validatedData = updateWorkScheduleSchema.parse(req.body);
+      const workSchedule = await storage.updateWorkSchedule(parseInt(id), validatedData);
+      if (!workSchedule) {
+        return res.status(404).json({ message: "Work schedule not found" });
+      }
+      res.json(workSchedule);
+    } catch (error) {
+      console.error("Error updating work schedule:", error);
+      res.status(500).json({ message: "Failed to update work schedule" });
+    }
+  });
+
+  // Delete work schedule
+  app.delete("/api/work-schedules/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteWorkSchedule(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ message: "Work schedule not found" });
+      }
+      res.json({ message: "Work schedule deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting work schedule:", error);
+      res.status(500).json({ message: "Failed to delete work schedule" });
+    }
+  });
+
+  // Get work schedule rules
+  app.get("/api/work-schedules/:id/rules", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const rules = await storage.getWorkScheduleRules(parseInt(id));
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching work schedule rules:", error);
+      res.status(500).json({ message: "Failed to fetch work schedule rules" });
+    }
+  });
+
+  // Create work schedule rule
+  app.post("/api/work-schedule-rules", async (req, res) => {
+    try {
+      const { insertWorkScheduleRuleSchema } = await import('../shared/schema.js');
+      const validatedData = insertWorkScheduleRuleSchema.parse(req.body);
+      const rule = await storage.createWorkScheduleRule(validatedData);
+      res.status(201).json(rule);
+    } catch (error) {
+      console.error("Error creating work schedule rule:", error);
+      res.status(500).json({ message: "Failed to create work schedule rule" });
+    }
+  });
+
+  // Update work schedule rule
+  app.patch("/api/work-schedule-rules/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { updateWorkScheduleRuleSchema } = await import('../shared/schema.js');
+      const validatedData = updateWorkScheduleRuleSchema.parse(req.body);
+      const rule = await storage.updateWorkScheduleRule(parseInt(id), validatedData);
+      if (!rule) {
+        return res.status(404).json({ message: "Work schedule rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Error updating work schedule rule:", error);
+      res.status(500).json({ message: "Failed to update work schedule rule" });
+    }
+  });
+
+  // Delete work schedule rule
+  app.delete("/api/work-schedule-rules/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteWorkScheduleRule(parseInt(id));
+      if (!success) {
+        return res.status(404).json({ message: "Work schedule rule not found" });
+      }
+      res.json({ message: "Work schedule rule deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting work schedule rule:", error);
+      res.status(500).json({ message: "Failed to delete work schedule rule" });
+    }
+  });
+
+  // Validate appointment time against work schedule
+  app.post("/api/work-schedules/validate-time", async (req, res) => {
+    try {
+      const { date, startTime, durationMinutes, userId } = req.body;
+
+      if (!date || !startTime || !durationMinutes) {
+        return res.status(400).json({ message: "Missing required fields: date, startTime, durationMinutes" });
+      }
+
+      const { workScheduleService } = await import('./services/work-schedule-service.js');
+      const validation = await workScheduleService.validateAppointmentTime(date, startTime, durationMinutes, userId);
+
+      res.json(validation);
+    } catch (error) {
+      console.error("Error validating appointment time:", error);
+      res.status(500).json({ message: "Failed to validate appointment time" });
+    }
+  });
+
+  // Get available time slots for a date
+  app.get("/api/work-schedules/available-slots", async (req, res) => {
+    try {
+      const { date, userId } = req.query;
+
+      if (!date) {
+        return res.status(400).json({ message: "Missing required parameter: date" });
+      }
+
+      const { workScheduleService } = await import('./services/work-schedule-service.js');
+      const slots = await workScheduleService.getAvailableTimeSlots(date as string, userId ? parseInt(userId as string) : undefined);
+
+      res.json(slots);
+    } catch (error) {
+      console.error("Error fetching available time slots:", error);
+      res.status(500).json({ message: "Failed to fetch available time slots" });
     }
   });
 

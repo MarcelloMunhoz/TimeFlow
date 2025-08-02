@@ -60,8 +60,9 @@ export function usePomodoroAutoCompletion(options: UsePomodoroAutoCompletionOpti
   // Handle errors
   const handleError = useCallback((error: Error) => {
     console.error('🍅 Auto-completion error:', error);
-    
-    if (showToastNotifications) {
+
+    // Only show toast notifications for non-network errors or if explicitly enabled
+    if (showToastNotifications && !error.message.includes('fetch')) {
       toast({
         title: "Erro na Auto-Conclusão",
         description: "Erro ao verificar tarefas Pomodoro atrasadas",

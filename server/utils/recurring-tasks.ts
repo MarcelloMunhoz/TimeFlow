@@ -1,4 +1,5 @@
 import { CreateRecurringAppointment, InsertAppointment } from '../../shared/schema.js';
+import { workScheduleService } from '../services/work-schedule-service.js';
 
 /**
  * Check if a date falls on a weekend (Saturday or Sunday)
@@ -76,10 +77,10 @@ export function calculateNextOccurrence(
 /**
  * Generate all recurring appointment instances
  */
-export function generateRecurringInstances(
+export async function generateRecurringInstances(
   templateData: CreateRecurringAppointment,
   recurringTaskId: number
-): InsertAppointment[] {
+): Promise<InsertAppointment[]> {
   if (!templateData.isRecurring || !templateData.recurrencePattern) {
     return [];
   }
@@ -87,37 +88,57 @@ export function generateRecurringInstances(
   const instances: InsertAppointment[] = [];
   const startDate = parseDateString(templateData.date);
   const interval = templateData.recurrenceInterval || 1;
-  
+
   let currentDate = new Date(startDate);
-  let occurrenceCount = 0;
-  const maxOccurrences = templateData.recurrenceEndCount || 1000; // Safety limit
-  
+  let createdInstances = 0;
+  const maxInstances = templateData.recurrenceEndCount || 1000; // Safety limit
+  let iterations = 0;
+  const maxIterations = maxInstances * 3; // Safety limit to prevent infinite loops
+
   // Determine end condition
-  const endDate = templateData.recurrenceEndDate 
+  const endDate = templateData.recurrenceEndDate
     ? parseDateString(templateData.recurrenceEndDate)
     : null;
 
-  while (occurrenceCount < maxOccurrences) {
+  while (createdInstances < maxInstances && iterations < maxIterations) {
+    iterations++;
+
     // Check if we've reached the end date
     if (endDate && currentDate > endDate) {
       break;
     }
-    
-    // Check if we've reached the occurrence count limit
-    if (templateData.recurrenceEndCount && occurrenceCount >= templateData.recurrenceEndCount) {
-      break;
+
+    // VERIFICAR SE É FINAL DE SEMANA: Sábado (6) e Domingo (0)
+    const dayOfWeek = currentDate.getDay();
+    const originalDateString = formatDateString(currentDate);
+
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      // Pular final de semana - ir para próximo dia sem criar instância
+      currentDate = calculateNextOccurrence(currentDate, templateData.recurrencePattern, interval);
+      continue; // Pular esta iteração, não criar instância
     }
 
-    // Move to next business day if it falls on weekend
-    const originalDateString = formatDateString(currentDate);
-    const { adjustedDate, wasAdjusted } = moveToNextBusinessDay(currentDate);
-    const finalDateString = formatDateString(adjustedDate);
+    // Determine work schedule compliance for the current date
+    const startMinutes = timeToMinutes(templateData.startTime);
+    const endMinutes = startMinutes + templateData.durationMinutes;
+
+    const isAfterHours = startMinutes >= timeToMinutes('18:00');
+    const isWithinWorkHours = !isAfterHours &&
+      ((startMinutes >= timeToMinutes('08:00') && endMinutes <= timeToMinutes('12:00')) ||
+       (startMinutes >= timeToMinutes('13:00') && endMinutes <= timeToMinutes('18:00')));
+
+    const finalValidation = {
+      isWithinWorkHours: isWithinWorkHours,
+      isOvertime: isAfterHours,
+      violation: null,
+      allowOverlap: templateData.allowOverlap || false
+    };
 
     // Create appointment instance
     const instance: InsertAppointment = {
       title: templateData.title,
       description: templateData.description,
-      date: finalDateString,
+      date: originalDateString,
       startTime: templateData.startTime,
       durationMinutes: templateData.durationMinutes,
       peopleWith: templateData.peopleWith,
@@ -150,13 +171,18 @@ export function generateRecurringInstances(
       parentTaskId: null, // Will be set to the template ID after creation
       recurringTaskId: recurringTaskId,
       isRecurringTemplate: false,
-      originalDate: wasAdjusted ? originalDateString : null,
-      wasRescheduledFromWeekend: wasAdjusted,
+      originalDate: null, // No rescheduling needed since we skip weekends
+      wasRescheduledFromWeekend: false,
+      // Work schedule compliance fields
+      isWithinWorkHours: finalValidation.isWithinWorkHours,
+      isOvertime: finalValidation.isOvertime,
+      workScheduleViolation: finalValidation.violation || null,
+      allowOverlap: templateData.allowOverlap || finalValidation.allowOverlap,
       updatedAt: null,
     };
 
     instances.push(instance);
-    occurrenceCount++;
+    createdInstances++;
 
     // Calculate next occurrence
     currentDate = calculateNextOccurrence(currentDate, templateData.recurrencePattern, interval);
@@ -219,4 +245,12 @@ export function generateRecurringTaskId(): number {
 
   // Ensure it's within PostgreSQL integer range
   return Math.min(id, 2147483647);
+}
+
+/**
+ * Convert time string (HH:MM) to minutes since midnight
+ */
+function timeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
 }

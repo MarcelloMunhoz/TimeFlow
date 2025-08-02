@@ -3,16 +3,23 @@ import {
   type Company, type InsertCompany, type UpdateCompany, companies,
   type Project, type InsertProject, type UpdateProject, projects,
   type User, type InsertUser, type UpdateUser, users,
-  type CreateRecurringAppointment
+  type Phase, type InsertPhase, type UpdatePhase, phases,
+  type ProjectPhase, type InsertProjectPhase, type UpdateProjectPhase, projectPhases,
+  type Subphase, type InsertSubphase, type UpdateSubphase, subphases,
+  type ProjectSubphase, type InsertProjectSubphase, type UpdateProjectSubphase, projectSubphases,
+  type CreateRecurringAppointment,
+  type WorkSchedule, type InsertWorkSchedule, type UpdateWorkSchedule, workSchedules,
+  type WorkScheduleRule, type InsertWorkScheduleRule, type UpdateWorkScheduleRule, workScheduleRules
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, desc, isNotNull } from "drizzle-orm";
 import {
   generateRecurringInstances,
   validateRecurringTask,
   generateRecurringTaskId
 } from "./utils/recurring-tasks";
+import { workScheduleService } from "./services/work-schedule-service.js";
 
 export interface IStorage {
   // Companies
@@ -39,6 +46,20 @@ export interface IStorage {
   updateUser(id: number, user: UpdateUser): Promise<User | undefined>;
   deleteUser(id: number): Promise<boolean>;
 
+  // Phases
+  getPhases(): Promise<Phase[]>;
+  getPhase(id: number): Promise<Phase | undefined>;
+  createPhase(phase: InsertPhase): Promise<Phase>;
+  updatePhase(id: number, phase: UpdatePhase): Promise<Phase | undefined>;
+  deletePhase(id: number): Promise<boolean>;
+
+  // Project Phases
+  getProjectPhases(projectId: number): Promise<(ProjectPhase & { phase: Phase })[]>;
+  addPhaseToProject(projectPhase: InsertProjectPhase): Promise<ProjectPhase>;
+  updateProjectPhase(projectId: number, phaseId: number, updates: UpdateProjectPhase): Promise<ProjectPhase | undefined>;
+  removePhaseFromProject(projectId: number, phaseId: number): Promise<boolean>;
+  getPhasesByProject(projectId: number): Promise<Phase[]>;
+
   // Appointments
   getAppointments(): Promise<Appointment[]>;
   getAppointment(id: string): Promise<Appointment | undefined>;
@@ -56,6 +77,19 @@ export interface IStorage {
   updateRecurringTaskSeries(recurringTaskId: number, updates: UpdateAppointment): Promise<Appointment[]>;
   deleteRecurringTaskSeries(recurringTaskId: number): Promise<boolean>;
   deleteRecurringTaskInstance(id: string, deleteAll?: boolean): Promise<boolean>;
+
+  // Work Schedules
+  getWorkSchedules(): Promise<WorkSchedule[]>;
+  getUserWorkSchedule(userId: number): Promise<(WorkSchedule & { rules: WorkScheduleRule[] }) | undefined>;
+  createWorkSchedule(workSchedule: InsertWorkSchedule): Promise<WorkSchedule>;
+  updateWorkSchedule(id: number, workSchedule: UpdateWorkSchedule): Promise<WorkSchedule | undefined>;
+  deleteWorkSchedule(id: number): Promise<boolean>;
+
+  // Work Schedule Rules
+  getWorkScheduleRules(workScheduleId: number): Promise<WorkScheduleRule[]>;
+  createWorkScheduleRule(rule: InsertWorkScheduleRule): Promise<WorkScheduleRule>;
+  updateWorkScheduleRule(id: number, rule: UpdateWorkScheduleRule): Promise<WorkScheduleRule | undefined>;
+  deleteWorkScheduleRule(id: number): Promise<boolean>;
 
   // Analytics
   getProductivityStats(): Promise<{
@@ -324,21 +358,99 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAppointment(insertAppointment: InsertAppointment): Promise<Appointment> {
-    const endTime = this.calculateEndTime(insertAppointment.startTime, insertAppointment.durationMinutes);
-    
-    // Check for time conflicts if not a Pomodoro
-    if (!insertAppointment.isPomodoro) {
-      const hasConflict = await this.checkTimeConflict(insertAppointment.date, insertAppointment.startTime, endTime);
-      if (hasConflict) {
-        throw new Error("Conflito de horário detectado. Já existe um agendamento neste período.");
+    // VALIDAÇÃO CORRIGIDA DE FINAIS DE SEMANA - SEM PROBLEMAS DE FUSO HORÁRIO
+    const dateStr = insertAppointment.date;
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const appointmentDate = new Date(year, month - 1, day); // month - 1 porque JavaScript usa 0-11
+    const dayOfWeek = appointmentDate.getDay();
+
+    console.log(`🔍 STORAGE - Validando data: ${dateStr} = dia da semana ${dayOfWeek}`);
+    console.log(`🔍 STORAGE - Data criada: ${appointmentDate.toDateString()}`);
+
+    // VERIFICAR SE É ENCAIXE AUTORIZADO - SE SIM, PULAR TODAS AS VALIDAÇÕES
+    const isEncaixeAuthorized = insertAppointment.allowWeekendOverride || insertAppointment.allowOverlap;
+
+    if (isEncaixeAuthorized) {
+      console.log(`✅ STORAGE - ENCAIXE AUTORIZADO - PULANDO TODAS AS VALIDAÇÕES`);
+    } else {
+      // SÁBADO = 6, DOMINGO = 0 - BLOQUEAR APENAS SE NÃO FOR ENCAIXE
+      if (dayOfWeek === 6) {
+        console.log(`❌ STORAGE - BLOQUEANDO SÁBADO (sem autorização de encaixe)`);
+        throw new Error(`SÁBADO NÃO É PERMITIDO! Escolha segunda a sexta.`);
+      }
+
+      if (dayOfWeek === 0) {
+        console.log(`❌ STORAGE - BLOQUEANDO DOMINGO (sem autorização de encaixe)`);
+        throw new Error(`DOMINGO NÃO É PERMITIDO! Escolha segunda a sexta.`);
       }
     }
-    
-    const appointmentData = {
+
+    console.log(`✅ STORAGE - Dia útil aprovado: ${dayOfWeek}`);
+
+    const endTime = this.calculateEndTime(insertAppointment.startTime, insertAppointment.durationMinutes);
+
+    // Calculate time values that will be used throughout the function
+    const startMinutes = this.timeToMinutes(insertAppointment.startTime);
+    const endMinutes = startMinutes + insertAppointment.durationMinutes;
+
+    // Block lunch break (12:00-13:00) - APENAS SE NÃO FOR ENCAIXE
+    if (!isEncaixeAuthorized) {
+      const lunchStart = this.timeToMinutes('12:00');
+      const lunchEnd = this.timeToMinutes('13:00');
+
+      console.log(`🔍 VALIDAÇÃO ALMOÇO - Horário: ${insertAppointment.startTime} (${startMinutes}min) até ${endMinutes}min`);
+
+      if ((startMinutes >= lunchStart && startMinutes < lunchEnd) ||
+          (endMinutes > lunchStart && endMinutes <= lunchEnd) ||
+          (startMinutes < lunchStart && endMinutes > lunchEnd)) {
+        console.log(`❌ BLOQUEANDO HORÁRIO DE ALMOÇO`);
+        throw new Error("Agendamentos não são permitidos durante o horário de almoço (12:00-13:00).");
+      }
+
+      console.log(`✅ HORÁRIO DE ALMOÇO OK`);
+    } else {
+      console.log(`✅ ENCAIXE - PULANDO VALIDAÇÃO DE HORÁRIO DE ALMOÇO`);
+    }
+
+    // Check for time conflicts - APENAS SE NÃO FOR ENCAIXE
+    if (!isEncaixeAuthorized && !insertAppointment.isPomodoro) {
+      console.log(`🔍 VERIFICANDO CONFLITOS DE HORÁRIO`);
+      const hasConflict = await this.checkTimeConflict(insertAppointment.date, insertAppointment.startTime, endTime);
+      if (hasConflict) {
+        console.log(`❌ CONFLITO DE HORÁRIO DETECTADO`);
+        throw new Error("Conflito de horário detectado. Já existe um agendamento neste período.");
+      }
+      console.log(`✅ NENHUM CONFLITO DE HORÁRIO`);
+    } else {
+      console.log(`✅ ENCAIXE - PULANDO VALIDAÇÃO DE CONFLITOS DE HORÁRIO`);
+    }
+
+
+    // Determine work schedule compliance
+    const isAfterHours = startMinutes >= this.timeToMinutes('18:00');
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const isWithinWorkHours = !isAfterHours && !isWeekend &&
+      ((startMinutes >= this.timeToMinutes('08:00') && endMinutes <= this.timeToMinutes('12:00')) ||
+       (startMinutes >= this.timeToMinutes('13:00') && endMinutes <= this.timeToMinutes('18:00')));
+
+    // Determine final allowOverlap value
+    const finalAllowOverlap = insertAppointment.allowOverlap || insertAppointment.allowWeekendOverride || false;
+
+    console.log(`🔍 STORAGE - allowOverlap: ${insertAppointment.allowOverlap}`);
+    console.log(`🔍 STORAGE - allowWeekendOverride: ${insertAppointment.allowWeekendOverride}`);
+    console.log(`🔍 STORAGE - finalAllowOverlap: ${finalAllowOverlap}`);
+
+    // Remove allowOverlap and allowWeekendOverride from appointmentData as they're handled separately
+    const { allowOverlap, allowWeekendOverride, ...appointmentData } = {
       ...insertAppointment,
       endTime,
       status: "scheduled" as const,
       completedAt: null,
+      // Set work schedule compliance fields
+      isWithinWorkHours: isWithinWorkHours,
+      isOvertime: isAfterHours || isWeekend, // Mark weekend appointments as overtime/encaixe
+      workScheduleViolation: isWeekend ? (dayOfWeek === 0 ? 'weekend_sunday' : 'weekend_saturday') : null,
+      allowOverlap: finalAllowOverlap,
     };
 
     const [appointment] = await db.insert(appointments).values(appointmentData).returning();
@@ -372,8 +484,8 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getAppointment(id);
     if (!existing) return undefined;
 
-    // Check for time conflicts if updating schedule
-    if ((updateData.startTime || updateData.durationMinutes || updateData.date) && !existing.isPomodoro) {
+    // Check for time conflicts if updating schedule (unless allowOverlap is true)
+    if ((updateData.startTime || updateData.durationMinutes || updateData.date) && !existing.isPomodoro && !updateData.allowOverlap) {
       const newStartTime = updateData.startTime || existing.startTime;
       const newDurationMinutes = updateData.durationMinutes || existing.durationMinutes;
       const newDate = updateData.date || existing.date;
@@ -399,8 +511,11 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
+    // Remove allowOverlap from updateData as it's not a database field
+    const { allowOverlap, ...dataToUpdate } = updateData;
+
     const [updated] = await db.update(appointments)
-      .set(updateData)
+      .set(dataToUpdate)
       .where(eq(appointments.id, parseInt(id)))
       .returning();
 
@@ -540,15 +655,18 @@ export class DatabaseStorage implements IStorage {
     for (const appointment of existingAppointments) {
       if (excludeId && appointment.id === excludeId) continue;
 
+      // Skip cancelled appointments
+      if (appointment.status === 'cancelled') continue;
+
       // Check if times overlap
       const existingStart = appointment.startTime;
       const existingEnd = appointment.endTime;
 
-      // Convert times to minutes for comparison
-      const startMinutes = this.timeToMinutes(startTime);
-      const endMinutes = this.timeToMinutes(endTime);
-      const existingStartMinutes = this.timeToMinutes(existingStart);
-      const existingEndMinutes = this.timeToMinutes(existingEnd);
+      // Convert times to minutes for comparison (handle midnight crossings)
+      const startMinutes = this.timeToMinutesWithMidnightHandling(startTime, false);
+      const endMinutes = this.timeToMinutesWithMidnightHandling(endTime, true);
+      const existingStartMinutes = this.timeToMinutesWithMidnightHandling(existingStart, false);
+      const existingEndMinutes = this.timeToMinutesWithMidnightHandling(existingEnd, true);
 
       // Check for overlap
       if (startMinutes < existingEndMinutes && endMinutes > existingStartMinutes) {
@@ -562,6 +680,18 @@ export class DatabaseStorage implements IStorage {
   private timeToMinutes(time: string): number {
     const [hours, minutes] = time.split(':').map(Number);
     return hours * 60 + minutes;
+  }
+
+  private timeToMinutesWithMidnightHandling(time: string, isEndTime: boolean = false): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    const totalMinutes = hours * 60 + minutes;
+
+    // If it's an end time and it's 00:00, treat it as 24:00 (1440 minutes)
+    if (isEndTime && hours === 0 && minutes === 0) {
+      return 1440; // 24:00 in minutes
+    }
+
+    return totalMinutes;
   }
 
   private async updateAssociatedPomodoro(updatedAppointment: Appointment): Promise<void> {
@@ -621,7 +751,7 @@ export class DatabaseStorage implements IStorage {
     // Generate and create all instances
     const instances: Appointment[] = [];
     if (appointmentData.isRecurring) {
-      const instancesData = generateRecurringInstances(appointmentData, recurringTaskId);
+      const instancesData = await generateRecurringInstances(appointmentData, recurringTaskId);
       console.log(`📋 Generated ${instancesData.length} recurring instances`);
 
       for (const instanceData of instancesData) {
@@ -701,6 +831,1453 @@ export class DatabaseStorage implements IStorage {
     return await this.deleteAppointment(id);
   }
 
+  // Phase methods
+  async getPhases(): Promise<Phase[]> {
+    return await db.select().from(phases);
+  }
+
+  async getPhase(id: number): Promise<Phase | undefined> {
+    const [phase] = await db.select().from(phases).where(eq(phases.id, id));
+    return phase;
+  }
+
+  async createPhase(insertPhase: InsertPhase): Promise<Phase> {
+    const [phase] = await db.insert(phases).values(insertPhase).returning();
+    return phase;
+  }
+
+  async updatePhase(id: number, updateData: UpdatePhase): Promise<Phase | undefined> {
+    const [updated] = await db.update(phases)
+      .set(updateData)
+      .where(eq(phases.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deletePhase(id: number): Promise<boolean> {
+    // First, check if the phase exists
+    const existing = await db.select().from(phases).where(eq(phases.id, id));
+    if (existing.length === 0) {
+      return false;
+    }
+
+    // Check if phase has subphases
+    const [subphase] = await db.select().from(subphases).where(eq(subphases.phaseId, id)).limit(1);
+    if (subphase) {
+      throw new Error("Cannot delete phase that has subphases. Delete all subphases first.");
+    }
+
+    // Check if phase is in use by any projects
+    const [projectPhase] = await db.select().from(projectPhases).where(eq(projectPhases.phaseId, id)).limit(1);
+    if (projectPhase) {
+      throw new Error("Cannot delete phase that is assigned to projects");
+    }
+
+    // Check if phase is in use by any appointments
+    const [appointment] = await db.select().from(appointments).where(eq(appointments.phaseId, id)).limit(1);
+    if (appointment) {
+      throw new Error("Cannot delete phase that is assigned to appointments");
+    }
+
+    // Delete the phase
+    await db.delete(phases).where(eq(phases.id, id));
+
+    // Verify deletion by checking if the phase still exists
+    const afterDelete = await db.select().from(phases).where(eq(phases.id, id));
+    return afterDelete.length === 0;
+  }
+
+  async forceDeletePhase(id: number): Promise<boolean> {
+    console.log(`🗑️ FORCE DELETING phase ${id}...`);
+
+    // First, check if the phase exists
+    const existing = await db.select().from(phases).where(eq(phases.id, id));
+    if (existing.length === 0) {
+      console.log(`❌ Phase ${id} does not exist`);
+      return false;
+    }
+
+    console.log(`✅ Phase ${id} exists, proceeding with force deletion...`);
+
+    // Step 1: Remove all subphases for this phase
+    console.log(`🧹 Removing subphases for phase ${id}...`);
+    const subphasesResult = await db.delete(subphases).where(eq(subphases.phaseId, id));
+    console.log(`✅ Removed ${(subphasesResult as any).rowCount || 0} subphases`);
+
+    // Step 2: Remove all project-phase associations
+    console.log(`🧹 Removing project-phase associations for phase ${id}...`);
+    const projectPhasesResult = await db.delete(projectPhases).where(eq(projectPhases.phaseId, id));
+    console.log(`✅ Removed ${(projectPhasesResult as any).rowCount || 0} project-phase associations`);
+
+    // Step 3: Clear phase from all appointments
+    console.log(`🧹 Clearing phase ${id} from appointments...`);
+    const appointmentsResult = await db.update(appointments)
+      .set({ phaseId: null })
+      .where(eq(appointments.phaseId, id));
+    console.log(`✅ Cleared phase from ${(appointmentsResult as any).rowCount || 0} appointments`);
+
+    // Step 4: Delete the phase itself
+    console.log(`🗑️ Deleting phase ${id}...`);
+    const phaseResult = await db.delete(phases).where(eq(phases.id, id));
+    console.log(`✅ Phase deletion result: ${(phaseResult as any).rowCount || 0} rows affected`);
+
+    // Verify deletion
+    const afterDelete = await db.select().from(phases).where(eq(phases.id, id));
+    const success = afterDelete.length === 0;
+
+    if (success) {
+      console.log(`🎉 Phase ${id} successfully force deleted!`);
+    } else {
+      console.log(`❌ Phase ${id} still exists after deletion attempt`);
+    }
+
+    return success;
+  }
+
+  // Project Phase methods
+  async getProjectPhases(projectId: number): Promise<any[]> {
+    try {
+      console.log(`🔍 Getting project phases for project ${projectId}`);
+
+      // Use Drizzle ORM instead of raw SQL
+      const result = await db
+        .select()
+        .from(projectPhases)
+        .innerJoin(phases, eq(projectPhases.phaseId, phases.id))
+        .where(eq(projectPhases.projectId, projectId))
+        .orderBy(phases.orderIndex, projectPhases.createdAt);
+
+      console.log(`✅ Found ${result.length} project phases`);
+
+      return result.map((row: any) => ({
+        id: row.project_phases.id,
+        projectId: row.project_phases.projectId,
+        phaseId: row.project_phases.phaseId,
+        deadline: row.project_phases.deadline,
+        startDate: row.project_phases.startDate,
+        endDate: row.project_phases.endDate,
+        actualStartDate: row.project_phases.actualStartDate,
+        actualEndDate: row.project_phases.actualEndDate,
+        status: row.project_phases.status,
+        progressPercentage: row.project_phases.progressPercentage,
+        notes: row.project_phases.notes,
+        createdAt: row.project_phases.createdAt,
+        phase: {
+          id: row.phases.id,
+          name: row.phases.name,
+          description: row.phases.description,
+          color: row.phases.color,
+          orderIndex: row.phases.orderIndex,
+          estimatedDurationDays: row.phases.estimatedDurationDays,
+          isActive: row.phases.isActive,
+          createdAt: row.phases.createdAt
+        }
+      }));
+    } catch (error) {
+      console.error("Error in getProjectPhases:", error);
+      return [];
+    }
+  }
+
+  async addPhaseToProject(insertProjectPhase: InsertProjectPhase): Promise<ProjectPhase> {
+    const [projectPhase] = await db.insert(projectPhases).values(insertProjectPhase).returning();
+    return projectPhase;
+  }
+
+  async updateProjectPhase(projectId: number, phaseId: number, updates: UpdateProjectPhase): Promise<ProjectPhase | undefined> {
+    const [updated] = await db.update(projectPhases)
+      .set(updates)
+      .where(and(eq(projectPhases.projectId, projectId), eq(projectPhases.phaseId, phaseId)))
+      .returning();
+    return updated;
+  }
+
+
+
+  async getPhasesByProject(projectId: number): Promise<Phase[]> {
+    const result = await db
+      .select({ phase: phases })
+      .from(projectPhases)
+      .innerJoin(phases, eq(projectPhases.phaseId, phases.id))
+      .where(eq(projectPhases.projectId, projectId));
+
+    return result.map(r => r.phase);
+  }
+
+  async getAllProjectPhases(): Promise<ProjectPhase[]> {
+    return await db.select().from(projectPhases);
+  }
+
+  async getAppointmentsWithPhases(): Promise<Appointment[]> {
+    return await db.select().from(appointments).where(isNotNull(appointments.phaseId));
+  }
+
+  async removePhaseFromProject(projectId: number, phaseId: number): Promise<boolean> {
+    try {
+      // Check if the association exists
+      const existing = await db.select().from(projectPhases)
+        .where(and(eq(projectPhases.projectId, projectId), eq(projectPhases.phaseId, phaseId)));
+
+      if (existing.length === 0) {
+        return false;
+      }
+
+      // Remove the association
+      await db.delete(projectPhases)
+        .where(and(eq(projectPhases.projectId, projectId), eq(projectPhases.phaseId, phaseId)));
+
+      // Verify deletion
+      const afterDelete = await db.select().from(projectPhases)
+        .where(and(eq(projectPhases.projectId, projectId), eq(projectPhases.phaseId, phaseId)));
+
+      return afterDelete.length === 0;
+    } catch (error) {
+      console.error("Error removing phase from project:", error);
+      throw error;
+    }
+  }
+
+  async clearPhaseFromAppointments(phaseId: number): Promise<number> {
+    try {
+      // First, count how many appointments have this phase
+      const appointmentsWithPhase = await db.select().from(appointments)
+        .where(eq(appointments.phaseId, phaseId));
+
+      const count = appointmentsWithPhase.length;
+
+      if (count > 0) {
+        // Clear the phase_id from all appointments that have this phase
+        await db.update(appointments)
+          .set({ phaseId: null })
+          .where(eq(appointments.phaseId, phaseId));
+      }
+
+      return count;
+    } catch (error) {
+      console.error("Error clearing phase from appointments:", error);
+      throw error;
+    }
+  }
+
+  async completePhaseCleanup(): Promise<any> {
+    try {
+      console.log("🧹 Starting complete phase cleanup...");
+
+      // Step 1: Get all phases that are in use
+      const projectPhases = await this.getAllProjectPhases();
+      const appointmentsWithPhases = await this.getAppointmentsWithPhases();
+
+      const phaseIdsInProjects = Array.from(new Set(projectPhases.map(pp => pp.phaseId)));
+      const phaseIdsInAppointments = Array.from(new Set(appointmentsWithPhases.map(a => a.phaseId).filter(id => id !== null)));
+      const allPhaseIdsInUse = Array.from(new Set([...phaseIdsInProjects, ...phaseIdsInAppointments]));
+
+      console.log(`Found ${allPhaseIdsInUse.length} phases in use: ${allPhaseIdsInUse.join(', ')}`);
+
+      let clearedProjectPhases = 0;
+      let clearedAppointments = 0;
+      let deletedPhases = 0;
+
+      // Step 2: Clear all project-phase associations
+      for (const phaseId of phaseIdsInProjects) {
+        console.log(`Clearing phase ${phaseId} from all projects...`);
+        const result = await db.delete(projectPhases).where(eq(projectPhases.phaseId, phaseId));
+        clearedProjectPhases += (result as any).rowCount || 0;
+      }
+
+      // Step 3: Clear all appointments with phases
+      for (const phaseId of phaseIdsInAppointments) {
+        console.log(`Clearing phase ${phaseId} from all appointments...`);
+        const count = await this.clearPhaseFromAppointments(phaseId);
+        clearedAppointments += count;
+      }
+
+      // Step 4: Delete the phases themselves
+      for (const phaseId of allPhaseIdsInUse) {
+        try {
+          console.log(`Deleting phase ${phaseId}...`);
+          const result = await db.delete(phases).where(eq(phases.id, phaseId));
+          if ((result as any).rowCount > 0) {
+            deletedPhases++;
+            console.log(`✅ Phase ${phaseId} deleted successfully`);
+          }
+        } catch (error) {
+          console.log(`❌ Failed to delete phase ${phaseId}:`, error.message);
+        }
+      }
+
+      const summary = {
+        clearedProjectPhases,
+        clearedAppointments,
+        deletedPhases,
+        processedPhases: allPhaseIdsInUse
+      };
+
+      console.log("🎉 Complete phase cleanup finished:", summary);
+      return summary;
+
+    } catch (error) {
+      console.error("Error in complete phase cleanup:", error);
+      throw error;
+    }
+  }
+
+  async nuclearDeletePhases(phaseIds: number[]): Promise<any> {
+    console.log(`💥 NUCLEAR DELETE: Starting complete removal of phases ${phaseIds.join(', ')}`);
+
+    const results = {
+      deletedSubphases: 0,
+      deletedProjectPhases: 0,
+      clearedAppointments: 0,
+      deletedPhases: 0,
+      errors: []
+    };
+
+    try {
+      // Step 1: Delete all subphases for these phases (direct SQL)
+      console.log(`🗑️ Step 1: Deleting subphases for phases ${phaseIds.join(', ')}`);
+      for (const phaseId of phaseIds) {
+        try {
+          const subphasesResult = await db.execute(`DELETE FROM subphases WHERE phase_id = ${phaseId}`);
+          const deletedCount = (subphasesResult as any).rowCount || 0;
+          results.deletedSubphases += deletedCount;
+          console.log(`✅ Deleted ${deletedCount} subphases for phase ${phaseId}`);
+        } catch (error) {
+          console.log(`❌ Error deleting subphases for phase ${phaseId}:`, error.message);
+          results.errors.push(`Subphases for phase ${phaseId}: ${error.message}`);
+        }
+      }
+
+      // Step 2: Delete all project-phase associations (direct SQL)
+      console.log(`🗑️ Step 2: Deleting project-phase associations for phases ${phaseIds.join(', ')}`);
+      for (const phaseId of phaseIds) {
+        try {
+          const projectPhasesResult = await db.execute(`DELETE FROM project_phases WHERE phase_id = ${phaseId}`);
+          const deletedCount = (projectPhasesResult as any).rowCount || 0;
+          results.deletedProjectPhases += deletedCount;
+          console.log(`✅ Deleted ${deletedCount} project-phase associations for phase ${phaseId}`);
+        } catch (error) {
+          console.log(`❌ Error deleting project-phase associations for phase ${phaseId}:`, error.message);
+          results.errors.push(`Project phases for phase ${phaseId}: ${error.message}`);
+        }
+      }
+
+      // Step 3: Clear phase references from appointments (direct SQL)
+      console.log(`🗑️ Step 3: Clearing phase references from appointments for phases ${phaseIds.join(', ')}`);
+      for (const phaseId of phaseIds) {
+        try {
+          const appointmentsResult = await db.execute(`UPDATE appointments SET phase_id = NULL WHERE phase_id = ${phaseId}`);
+          const updatedCount = (appointmentsResult as any).rowCount || 0;
+          results.clearedAppointments += updatedCount;
+          console.log(`✅ Cleared ${updatedCount} appointments for phase ${phaseId}`);
+        } catch (error) {
+          console.log(`❌ Error clearing appointments for phase ${phaseId}:`, error.message);
+          results.errors.push(`Appointments for phase ${phaseId}: ${error.message}`);
+        }
+      }
+
+      // Step 4: Delete the phases themselves (direct SQL)
+      console.log(`🗑️ Step 4: Deleting phases ${phaseIds.join(', ')}`);
+      for (const phaseId of phaseIds) {
+        try {
+          const phaseResult = await db.execute(`DELETE FROM phases WHERE id = ${phaseId}`);
+          const deletedCount = (phaseResult as any).rowCount || 0;
+          results.deletedPhases += deletedCount;
+          if (deletedCount > 0) {
+            console.log(`✅ Successfully deleted phase ${phaseId}`);
+          } else {
+            console.log(`⚠️ Phase ${phaseId} was not found or already deleted`);
+          }
+        } catch (error) {
+          console.log(`❌ Error deleting phase ${phaseId}:`, error.message);
+          results.errors.push(`Phase ${phaseId}: ${error.message}`);
+        }
+      }
+
+      // Step 5: Verify deletion
+      console.log(`🔍 Step 5: Verifying deletion...`);
+      for (const phaseId of phaseIds) {
+        try {
+          const checkResult = await db.execute(`SELECT id FROM phases WHERE id = ${phaseId}`);
+          const stillExists = (checkResult as any).rows && (checkResult as any).rows.length > 0;
+          if (stillExists) {
+            console.log(`❌ Phase ${phaseId} still exists after deletion attempt`);
+            results.errors.push(`Phase ${phaseId} still exists after deletion`);
+          } else {
+            console.log(`✅ Phase ${phaseId} successfully removed from database`);
+          }
+        } catch (error) {
+          console.log(`⚠️ Error verifying deletion of phase ${phaseId}:`, error.message);
+        }
+      }
+
+      console.log(`💥 NUCLEAR DELETE completed:`, results);
+      return results;
+
+    } catch (error) {
+      console.error("💥 NUCLEAR DELETE failed:", error);
+      results.errors.push(`General error: ${error.message}`);
+      throw error;
+    }
+  }
+
+  // BI Stages methods
+  async getBiStages(): Promise<any[]> {
+    return await db.execute(`SELECT * FROM bi_stages ORDER BY order_index` as any).then((result: any) => result.rows);
+  }
+
+  async getBiStage(id: number): Promise<any | undefined> {
+    const result = await db.execute(`SELECT * FROM bi_stages WHERE id = ?` as any, [id]);
+    return (result as any).rows[0] || undefined;
+  }
+
+  // BI Project Templates methods
+  async getBiProjectTemplates(): Promise<any[]> {
+    return await db.execute(`SELECT * FROM bi_project_templates WHERE is_active = true ORDER BY name` as any).then((result: any) => result.rows);
+  }
+
+  async getBiProjectTemplate(id: number): Promise<any | undefined> {
+    const result = await db.execute(`SELECT * FROM bi_project_templates WHERE id = ?` as any, [id]);
+    return (result as any).rows[0] || undefined;
+  }
+
+  async createBiProjectTemplate(template: any): Promise<any> {
+    const result = await db.execute(`
+      INSERT INTO bi_project_templates (name, description, category, complexity, estimated_duration_weeks, required_skills, recommended_team_size, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING *
+    ` as any, [
+      template.name,
+      template.description,
+      template.category,
+      template.complexity || 'medium',
+      template.estimatedDurationWeeks,
+      template.requiredSkills ? JSON.stringify(template.requiredSkills) : null,
+      template.recommendedTeamSize || 1,
+      template.isActive !== undefined ? template.isActive : true
+    ]);
+    return (result as any).rows[0];
+  }
+
+  async updateBiProjectTemplate(id: number, updates: any): Promise<any | undefined> {
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (updates.name !== undefined) {
+      fields.push(`name = ?`);
+      values.push(updates.name);
+    }
+    if (updates.description !== undefined) {
+      fields.push(`description = ?`);
+      values.push(updates.description);
+    }
+    if (updates.category !== undefined) {
+      fields.push(`category = ?`);
+      values.push(updates.category);
+    }
+    if (updates.complexity !== undefined) {
+      fields.push(`complexity = ?`);
+      values.push(updates.complexity);
+    }
+    if (updates.estimatedDurationWeeks !== undefined) {
+      fields.push(`estimated_duration_weeks = ?`);
+      values.push(updates.estimatedDurationWeeks);
+    }
+    if (updates.requiredSkills !== undefined) {
+      fields.push(`required_skills = ?`);
+      values.push(updates.requiredSkills ? JSON.stringify(updates.requiredSkills) : null);
+    }
+    if (updates.recommendedTeamSize !== undefined) {
+      fields.push(`recommended_team_size = ?`);
+      values.push(updates.recommendedTeamSize);
+    }
+    if (updates.isActive !== undefined) {
+      fields.push(`is_active = ?`);
+      values.push(updates.isActive);
+    }
+
+    if (fields.length === 0) {
+      return await this.getBiProjectTemplate(id);
+    }
+
+    values.push(id);
+    const result = await db.execute(`
+      UPDATE bi_project_templates
+      SET ${fields.join(', ')}
+      WHERE id = ?
+      RETURNING *
+    ` as any, values);
+
+    return (result as any).rows[0] || undefined;
+  }
+
+  async deleteBiProjectTemplate(id: number): Promise<boolean> {
+    const result = await db.execute(`DELETE FROM bi_project_templates WHERE id = ?` as any, [id]);
+    return (result as any).rowCount > 0;
+  }
+
+  // BI Template Stages methods
+  async getTemplateStages(templateId: number): Promise<any[]> {
+    try {
+      const result = await db.execute(`SELECT * FROM bi_template_stages WHERE template_id = ?` as any, [templateId]);
+      return (result as any).rows || [];
+    } catch (error) {
+      console.error("Error in getTemplateStages:", error);
+      return [];
+    }
+  }
+
+  async addStageToTemplate(templateId: number, stageId: number, orderIndex: number, isOptional: boolean = false, customDurationDays?: number): Promise<any> {
+    const result = await db.execute(`
+      INSERT INTO bi_template_stages (template_id, stage_id, order_index, is_optional, custom_duration_days)
+      VALUES (?, ?, ?, ?, ?)
+      RETURNING *
+    ` as any, [templateId, stageId, orderIndex, isOptional, customDurationDays]);
+    return (result as any).rows[0];
+  }
+
+  async removeStageFromTemplate(templateId: number, stageId: number): Promise<boolean> {
+    const result = await db.execute(`
+      DELETE FROM bi_template_stages
+      WHERE template_id = ? AND stage_id = ?
+    ` as any, [templateId, stageId]);
+    return (result as any).rowCount > 0;
+  }
+
+  async updateTemplateStage(templateId: number, stageId: number, updates: any): Promise<any | undefined> {
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (updates.orderIndex !== undefined) {
+      fields.push(`order_index = ?`);
+      values.push(updates.orderIndex);
+    }
+    if (updates.isOptional !== undefined) {
+      fields.push(`is_optional = ?`);
+      values.push(updates.isOptional);
+    }
+    if (updates.customDurationDays !== undefined) {
+      fields.push(`custom_duration_days = ?`);
+      values.push(updates.customDurationDays);
+    }
+
+    if (fields.length === 0) {
+      return undefined;
+    }
+
+    values.push(templateId, stageId);
+    const result = await db.execute(`
+      UPDATE bi_template_stages
+      SET ${fields.join(', ')}
+      WHERE template_id = ? AND stage_id = ?
+      RETURNING *
+    ` as any, values);
+
+    return (result as any).rows[0] || undefined;
+  }
+
+  // BI Main Tasks methods
+  async getBiMainTasks(stageId?: number): Promise<any[]> {
+    try {
+      let query = `SELECT * FROM bi_main_tasks`;
+      let params: any[] = [];
+
+      if (stageId) {
+        query += ` WHERE stage_id = ?`;
+        params.push(stageId);
+      }
+
+      const result = await db.execute(query as any, params);
+      return (result as any).rows || [];
+    } catch (error) {
+      console.error("Error in getBiMainTasks:", error);
+      return [];
+    }
+  }
+
+  async getBiMainTask(id: number): Promise<any | undefined> {
+    try {
+      const result = await db.execute(`SELECT * FROM bi_main_tasks WHERE id = ?` as any, [id]);
+      return (result as any).rows[0] || undefined;
+    } catch (error) {
+      console.error("Error in getBiMainTask:", error);
+      return undefined;
+    }
+  }
+
+  async createBiMainTask(task: any): Promise<any> {
+    try {
+      const result = await db.execute(`INSERT INTO bi_main_tasks (stage_id, name, description, order_index, estimated_hours, is_required, prerequisites, best_practices, deliverables) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *` as any, [
+        task.stageId,
+        task.name,
+        task.description,
+        task.orderIndex,
+        task.estimatedHours,
+        task.isRequired !== undefined ? task.isRequired : true,
+        task.prerequisites ? JSON.stringify(task.prerequisites) : null,
+        task.bestPractices ? JSON.stringify(task.bestPractices) : null,
+        task.deliverables ? JSON.stringify(task.deliverables) : null
+      ]);
+      return (result as any).rows[0];
+    } catch (error) {
+      console.error("Error in createBiMainTask:", error);
+      throw error;
+    }
+  }
+
+  async updateBiMainTask(id: number, updates: any): Promise<any | undefined> {
+    try {
+      const fields = [];
+      const values = [];
+
+      if (updates.stageId !== undefined) {
+        fields.push(`stage_id = ?`);
+        values.push(updates.stageId);
+      }
+      if (updates.name !== undefined) {
+        fields.push(`name = ?`);
+        values.push(updates.name);
+      }
+      if (updates.description !== undefined) {
+        fields.push(`description = ?`);
+        values.push(updates.description);
+      }
+      if (updates.orderIndex !== undefined) {
+        fields.push(`order_index = ?`);
+        values.push(updates.orderIndex);
+      }
+      if (updates.estimatedHours !== undefined) {
+        fields.push(`estimated_hours = ?`);
+        values.push(updates.estimatedHours);
+      }
+      if (updates.isRequired !== undefined) {
+        fields.push(`is_required = ?`);
+        values.push(updates.isRequired);
+      }
+      if (updates.prerequisites !== undefined) {
+        fields.push(`prerequisites = ?`);
+        values.push(updates.prerequisites ? JSON.stringify(updates.prerequisites) : null);
+      }
+      if (updates.bestPractices !== undefined) {
+        fields.push(`best_practices = ?`);
+        values.push(updates.bestPractices ? JSON.stringify(updates.bestPractices) : null);
+      }
+      if (updates.deliverables !== undefined) {
+        fields.push(`deliverables = ?`);
+        values.push(updates.deliverables ? JSON.stringify(updates.deliverables) : null);
+      }
+
+      if (fields.length === 0) {
+        return await this.getBiMainTask(id);
+      }
+
+      values.push(id);
+      const result = await db.execute(`
+        UPDATE bi_main_tasks
+        SET ${fields.join(', ')}
+        WHERE id = ?
+        RETURNING *
+      ` as any, values);
+
+      return (result as any).rows[0] || undefined;
+    } catch (error) {
+      console.error("Error in updateBiMainTask:", error);
+      throw error;
+    }
+  }
+
+  async deleteBiMainTask(id: number): Promise<boolean> {
+    try {
+      const result = await db.execute(`DELETE FROM bi_main_tasks WHERE id = ?` as any, [id]);
+      return (result as any).rowCount > 0;
+    } catch (error) {
+      console.error("Error in deleteBiMainTask:", error);
+      return false;
+    }
+  }
+
+  // BI Subtasks methods
+  async getBiSubtasks(mainTaskId?: number): Promise<any[]> {
+    try {
+      let query = `SELECT * FROM bi_subtasks`;
+      let params: any[] = [];
+
+      if (mainTaskId) {
+        query += ` WHERE main_task_id = ?`;
+        params.push(mainTaskId);
+      }
+
+      const result = await db.execute(query as any, params);
+      return (result as any).rows || [];
+    } catch (error) {
+      console.error("Error in getBiSubtasks:", error);
+      return [];
+    }
+  }
+
+  async getBiSubtask(id: number): Promise<any | undefined> {
+    try {
+      const result = await db.execute(`SELECT * FROM bi_subtasks WHERE id = ?` as any, [id]);
+      return (result as any).rows[0] || undefined;
+    } catch (error) {
+      console.error("Error in getBiSubtask:", error);
+      return undefined;
+    }
+  }
+
+  async createBiSubtask(subtask: any): Promise<any> {
+    try {
+      const result = await db.execute(`INSERT INTO bi_subtasks (main_task_id, name, description, order_index, estimated_minutes, is_required, skill_level, tools, best_practices) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *` as any, [
+        subtask.mainTaskId,
+        subtask.name,
+        subtask.description,
+        subtask.orderIndex,
+        subtask.estimatedMinutes,
+        subtask.isRequired !== undefined ? subtask.isRequired : true,
+        subtask.skillLevel || 'intermediate',
+        subtask.tools ? JSON.stringify(subtask.tools) : null,
+        subtask.bestPractices ? JSON.stringify(subtask.bestPractices) : null
+      ]);
+      return (result as any).rows[0];
+    } catch (error) {
+      console.error("Error in createBiSubtask:", error);
+      throw error;
+    }
+  }
+
+  async updateBiSubtask(id: number, updates: any): Promise<any | undefined> {
+    try {
+      const fields = [];
+      const values = [];
+
+      if (updates.mainTaskId !== undefined) {
+        fields.push(`main_task_id = ?`);
+        values.push(updates.mainTaskId);
+      }
+      if (updates.name !== undefined) {
+        fields.push(`name = ?`);
+        values.push(updates.name);
+      }
+      if (updates.description !== undefined) {
+        fields.push(`description = ?`);
+        values.push(updates.description);
+      }
+      if (updates.orderIndex !== undefined) {
+        fields.push(`order_index = ?`);
+        values.push(updates.orderIndex);
+      }
+      if (updates.estimatedMinutes !== undefined) {
+        fields.push(`estimated_minutes = ?`);
+        values.push(updates.estimatedMinutes);
+      }
+      if (updates.isRequired !== undefined) {
+        fields.push(`is_required = ?`);
+        values.push(updates.isRequired);
+      }
+      if (updates.skillLevel !== undefined) {
+        fields.push(`skill_level = ?`);
+        values.push(updates.skillLevel);
+      }
+      if (updates.tools !== undefined) {
+        fields.push(`tools = ?`);
+        values.push(updates.tools ? JSON.stringify(updates.tools) : null);
+      }
+      if (updates.bestPractices !== undefined) {
+        fields.push(`best_practices = ?`);
+        values.push(updates.bestPractices ? JSON.stringify(updates.bestPractices) : null);
+      }
+
+      if (fields.length === 0) {
+        return await this.getBiSubtask(id);
+      }
+
+      values.push(id);
+      const result = await db.execute(`
+        UPDATE bi_subtasks
+        SET ${fields.join(', ')}
+        WHERE id = ?
+        RETURNING *
+      ` as any, values);
+
+      return (result as any).rows[0] || undefined;
+    } catch (error) {
+      console.error("Error in updateBiSubtask:", error);
+      throw error;
+    }
+  }
+
+  async deleteBiSubtask(id: number): Promise<boolean> {
+    try {
+      const result = await db.execute(`DELETE FROM bi_subtasks WHERE id = ?` as any, [id]);
+      return (result as any).rowCount > 0;
+    } catch (error) {
+      console.error("Error in deleteBiSubtask:", error);
+      return false;
+    }
+  }
+
+  // Project Roadmap methods
+  async getProjectRoadmap(projectId: number): Promise<any[]> {
+    try {
+      const result = await db.execute(`SELECT * FROM project_roadmap WHERE project_id = ?` as any, [projectId]);
+      return (result as any).rows || [];
+    } catch (error) {
+      console.error("Error in getProjectRoadmap:", error);
+      return [];
+    }
+  }
+
+  async createRoadmapItem(item: any): Promise<any> {
+    try {
+      const result = await db.execute(`INSERT INTO project_roadmap (project_id, stage_id, main_task_id, subtask_id, stage_order, task_order, estimated_start_date, estimated_end_date, actual_start_date, actual_end_date, status, dependencies, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *` as any, [
+        item.projectId,
+        item.stageId,
+        item.mainTaskId || null,
+        item.subtaskId || null,
+        item.stageOrder,
+        item.taskOrder,
+        item.estimatedStartDate,
+        item.estimatedEndDate,
+        item.actualStartDate || null,
+        item.actualEndDate || null,
+        item.status || 'not_started',
+        item.dependencies ? JSON.stringify(item.dependencies) : null,
+        item.notes || null
+      ]);
+      return (result as any).rows[0];
+    } catch (error) {
+      console.error("Error in createRoadmapItem:", error);
+      throw error;
+    }
+  }
+
+  async updateRoadmapItem(id: number, updates: any): Promise<any | undefined> {
+    try {
+      const fields = [];
+      const values = [];
+
+      if (updates.estimatedStartDate !== undefined) {
+        fields.push(`estimated_start_date = ?`);
+        values.push(updates.estimatedStartDate);
+      }
+      if (updates.estimatedEndDate !== undefined) {
+        fields.push(`estimated_end_date = ?`);
+        values.push(updates.estimatedEndDate);
+      }
+      if (updates.actualStartDate !== undefined) {
+        fields.push(`actual_start_date = ?`);
+        values.push(updates.actualStartDate);
+      }
+      if (updates.actualEndDate !== undefined) {
+        fields.push(`actual_end_date = ?`);
+        values.push(updates.actualEndDate);
+      }
+      if (updates.status !== undefined) {
+        fields.push(`status = ?`);
+        values.push(updates.status);
+      }
+      if (updates.dependencies !== undefined) {
+        fields.push(`dependencies = ?`);
+        values.push(updates.dependencies ? JSON.stringify(updates.dependencies) : null);
+      }
+      if (updates.notes !== undefined) {
+        fields.push(`notes = ?`);
+        values.push(updates.notes);
+      }
+
+      if (fields.length === 0) {
+        const result = await db.execute(`SELECT * FROM project_roadmap WHERE id = ?` as any, [id]);
+        return (result as any).rows[0] || undefined;
+      }
+
+      values.push(id);
+      const result = await db.execute(`UPDATE project_roadmap SET ${fields.join(', ')} WHERE id = ? RETURNING *` as any, values);
+
+      return (result as any).rows[0] || undefined;
+    } catch (error) {
+      console.error("Error in updateRoadmapItem:", error);
+      throw error;
+    }
+  }
+
+  async deleteRoadmapItem(id: number): Promise<boolean> {
+    try {
+      const result = await db.execute(`DELETE FROM project_roadmap WHERE id = ?` as any, [id]);
+      return (result as any).rowCount > 0;
+    } catch (error) {
+      console.error("Error in deleteRoadmapItem:", error);
+      return false;
+    }
+  }
+
+  async generateProjectRoadmap(projectId: number, templateId: number, startDate: string): Promise<any[]> {
+    try {
+      // First, clear any existing roadmap for this project
+      await db.execute(`DELETE FROM project_roadmap WHERE project_id = ?` as any, [projectId]);
+
+      // Get template stages
+      const templateStages = await this.getTemplateStages(templateId);
+
+      // Get all stages for ordering
+      const allStages = await this.getBiStages();
+      const stageMap = new Map(allStages.map(stage => [stage.id, stage]));
+
+      const roadmapItems = [];
+      let currentDate = new Date(startDate);
+      let stageOrder = 1;
+
+      for (const templateStage of templateStages.sort((a, b) => a.order_index - b.order_index)) {
+        const stage = stageMap.get(templateStage.stage_id);
+        if (!stage) continue;
+
+        const stageDuration = templateStage.custom_duration_days || stage.estimated_duration_days || 7;
+        const stageEndDate = new Date(currentDate);
+        stageEndDate.setDate(stageEndDate.getDate() + stageDuration);
+
+        // Create stage-level roadmap item
+        const stageItem = await this.createRoadmapItem({
+          projectId,
+          stageId: stage.id,
+          stageOrder,
+          taskOrder: 0,
+          estimatedStartDate: currentDate.toISOString().split('T')[0],
+          estimatedEndDate: stageEndDate.toISOString().split('T')[0],
+          status: stageOrder === 1 ? 'in_progress' : 'not_started'
+        });
+        roadmapItems.push(stageItem);
+
+        // Get main tasks for this stage
+        const mainTasks = await this.getBiMainTasks(stage.id);
+        let taskOrder = 1;
+        let taskCurrentDate = new Date(currentDate);
+
+        for (const mainTask of mainTasks.sort((a, b) => a.order_index - b.order_index)) {
+          const taskDurationDays = Math.ceil((mainTask.estimated_hours || 8) / 8); // Convert hours to days
+          const taskEndDate = new Date(taskCurrentDate);
+          taskEndDate.setDate(taskEndDate.getDate() + taskDurationDays);
+
+          const taskItem = await this.createRoadmapItem({
+            projectId,
+            stageId: stage.id,
+            mainTaskId: mainTask.id,
+            stageOrder,
+            taskOrder,
+            estimatedStartDate: taskCurrentDate.toISOString().split('T')[0],
+            estimatedEndDate: taskEndDate.toISOString().split('T')[0],
+            status: 'not_started'
+          });
+          roadmapItems.push(taskItem);
+
+          taskCurrentDate = new Date(taskEndDate);
+          taskOrder++;
+        }
+
+        currentDate = new Date(stageEndDate);
+        stageOrder++;
+      }
+
+      return roadmapItems;
+    } catch (error) {
+      console.error("Error in generateProjectRoadmap:", error);
+      throw error;
+    }
+  }
+
+  // Subphases methods
+  async getSubphases(phaseId?: number): Promise<any[]> {
+    try {
+      let whereConditions = [eq(subphases.isActive, true)];
+
+      if (phaseId) {
+        whereConditions.push(eq(subphases.phaseId, phaseId));
+      }
+
+      const result = await db
+        .select()
+        .from(subphases)
+        .where(and(...whereConditions))
+        .orderBy(subphases.orderIndex, subphases.name);
+
+      return result || [];
+    } catch (error) {
+      console.error("Error in getSubphases:", error);
+      return [];
+    }
+  }
+
+  async getSubphase(id: number): Promise<any | undefined> {
+    try {
+      const result = await db.select().from(subphases).where(eq(subphases.id, id)).limit(1);
+      return result[0];
+    } catch (error) {
+      console.error("Error in getSubphase:", error);
+      return undefined;
+    }
+  }
+
+  async createSubphase(subphase: any): Promise<any> {
+    try {
+      console.log("Creating subphase with data:", JSON.stringify(subphase, null, 2));
+
+      // Use Drizzle ORM instead of raw SQL
+      const result = await db.insert(subphases).values({
+        phaseId: subphase.phaseId,
+        name: subphase.name,
+        description: subphase.description || null,
+        color: subphase.color || null,
+        orderIndex: subphase.orderIndex || 0,
+        estimatedDurationDays: subphase.estimatedDurationDays || null,
+        isRequired: subphase.isRequired !== undefined ? subphase.isRequired : true,
+        prerequisites: subphase.prerequisites ? JSON.stringify(subphase.prerequisites) : null,
+        deliverables: subphase.deliverables ? JSON.stringify(subphase.deliverables) : null,
+        isActive: subphase.isActive !== undefined ? subphase.isActive : true
+      }).returning();
+
+      console.log("Subphase created successfully:", result[0]);
+      return result[0];
+    } catch (error) {
+      console.error("Error in createSubphase:", error);
+      throw error;
+    }
+  }
+
+  async updateSubphase(id: number, updates: any): Promise<any | undefined> {
+    try {
+      const fields = [];
+      const values = [];
+
+      if (updates.phaseId !== undefined) {
+        fields.push(`phase_id = ?`);
+        values.push(updates.phaseId);
+      }
+      if (updates.name !== undefined) {
+        fields.push(`name = ?`);
+        values.push(updates.name);
+      }
+      if (updates.description !== undefined) {
+        fields.push(`description = ?`);
+        values.push(updates.description);
+      }
+      if (updates.color !== undefined) {
+        fields.push(`color = ?`);
+        values.push(updates.color);
+      }
+      if (updates.orderIndex !== undefined) {
+        fields.push(`order_index = ?`);
+        values.push(updates.orderIndex);
+      }
+      if (updates.estimatedDurationDays !== undefined) {
+        fields.push(`estimated_duration_days = ?`);
+        values.push(updates.estimatedDurationDays);
+      }
+      if (updates.isRequired !== undefined) {
+        fields.push(`is_required = ?`);
+        values.push(updates.isRequired);
+      }
+      if (updates.prerequisites !== undefined) {
+        fields.push(`prerequisites = ?`);
+        values.push(updates.prerequisites ? JSON.stringify(updates.prerequisites) : null);
+      }
+      if (updates.deliverables !== undefined) {
+        fields.push(`deliverables = ?`);
+        values.push(updates.deliverables ? JSON.stringify(updates.deliverables) : null);
+      }
+      if (updates.isActive !== undefined) {
+        fields.push(`is_active = ?`);
+        values.push(updates.isActive);
+      }
+
+      if (fields.length === 0) {
+        return await this.getSubphase(id);
+      }
+
+      values.push(id);
+      const result = await db.execute(`UPDATE subphases SET ${fields.join(', ')} WHERE id = ? RETURNING *` as any, values);
+
+      return (result as any).rows[0] || undefined;
+    } catch (error) {
+      console.error("Error in updateSubphase:", error);
+      throw error;
+    }
+  }
+
+  async deleteSubphase(id: number): Promise<boolean> {
+    try {
+      // First, check if the subphase exists
+      const existing = await db.select().from(subphases).where(eq(subphases.id, id));
+      if (existing.length === 0) {
+        return false;
+      }
+
+      // Check if subphase is in use by any project subphases
+      const [projectSubphase] = await db.select().from(projectSubphases).where(eq(projectSubphases.subphaseId, id)).limit(1);
+      if (projectSubphase) {
+        throw new Error("Cannot delete subphase that is assigned to projects");
+      }
+
+      // Delete the subphase using Drizzle ORM
+      await db.delete(subphases).where(eq(subphases.id, id));
+
+      // Verify deletion by checking if the subphase still exists
+      const afterDelete = await db.select().from(subphases).where(eq(subphases.id, id));
+      return afterDelete.length === 0;
+    } catch (error) {
+      console.error("Error in deleteSubphase:", error);
+      throw error;
+    }
+  }
+
+  // Project Subphases methods
+  async getProjectSubphases(projectPhaseId: number): Promise<any[]> {
+    try {
+      const result = await db.execute(`
+        SELECT ps.*, s.name as subphase_name, s.description as subphase_description,
+               s.color as subphase_color, s.estimated_duration_days as default_duration,
+               u.name as assigned_user_name
+        FROM project_subphases ps
+        JOIN subphases s ON ps.subphase_id = s.id
+        LEFT JOIN users u ON ps.assigned_user_id = u.id
+        WHERE ps.project_phase_id = ?
+        ORDER BY s.order_index, s.name
+      ` as any, [projectPhaseId]);
+      return (result as any).rows || [];
+    } catch (error) {
+      console.error("Error in getProjectSubphases:", error);
+      return [];
+    }
+  }
+
+  async getProjectSubphase(id: number): Promise<any | undefined> {
+    try {
+      const result = await db.execute(`
+        SELECT ps.*, s.name as subphase_name, s.description as subphase_description,
+               s.color as subphase_color, s.estimated_duration_days as default_duration,
+               u.name as assigned_user_name
+        FROM project_subphases ps
+        JOIN subphases s ON ps.subphase_id = s.id
+        LEFT JOIN users u ON ps.assigned_user_id = u.id
+        WHERE ps.id = ?
+      ` as any, [id]);
+      return (result as any).rows[0] || undefined;
+    } catch (error) {
+      console.error("Error in getProjectSubphase:", error);
+      return undefined;
+    }
+  }
+
+  async createProjectSubphase(projectSubphase: any): Promise<any> {
+    try {
+      const result = await db.execute(`INSERT INTO project_subphases (project_phase_id, subphase_id, start_date, end_date, actual_start_date, actual_end_date, status, progress_percentage, assigned_user_id, priority, estimated_hours, actual_hours, quality_score, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *` as any, [
+        projectSubphase.projectPhaseId,
+        projectSubphase.subphaseId,
+        projectSubphase.startDate,
+        projectSubphase.endDate,
+        projectSubphase.actualStartDate,
+        projectSubphase.actualEndDate,
+        projectSubphase.status || 'not_started',
+        projectSubphase.progressPercentage || 0,
+        projectSubphase.assignedUserId,
+        projectSubphase.priority || 'medium',
+        projectSubphase.estimatedHours,
+        projectSubphase.actualHours || 0,
+        projectSubphase.qualityScore,
+        projectSubphase.notes
+      ]);
+      return (result as any).rows[0];
+    } catch (error) {
+      console.error("Error in createProjectSubphase:", error);
+      throw error;
+    }
+  }
+
+  async updateProjectSubphase(id: number, updates: any): Promise<any | undefined> {
+    try {
+      const fields = [];
+      const values = [];
+
+      if (updates.startDate !== undefined) {
+        fields.push(`start_date = ?`);
+        values.push(updates.startDate);
+      }
+      if (updates.endDate !== undefined) {
+        fields.push(`end_date = ?`);
+        values.push(updates.endDate);
+      }
+      if (updates.actualStartDate !== undefined) {
+        fields.push(`actual_start_date = ?`);
+        values.push(updates.actualStartDate);
+      }
+      if (updates.actualEndDate !== undefined) {
+        fields.push(`actual_end_date = ?`);
+        values.push(updates.actualEndDate);
+      }
+      if (updates.status !== undefined) {
+        fields.push(`status = ?`);
+        values.push(updates.status);
+      }
+      if (updates.progressPercentage !== undefined) {
+        fields.push(`progress_percentage = ?`);
+        values.push(updates.progressPercentage);
+      }
+      if (updates.assignedUserId !== undefined) {
+        fields.push(`assigned_user_id = ?`);
+        values.push(updates.assignedUserId);
+      }
+      if (updates.priority !== undefined) {
+        fields.push(`priority = ?`);
+        values.push(updates.priority);
+      }
+      if (updates.estimatedHours !== undefined) {
+        fields.push(`estimated_hours = ?`);
+        values.push(updates.estimatedHours);
+      }
+      if (updates.actualHours !== undefined) {
+        fields.push(`actual_hours = ?`);
+        values.push(updates.actualHours);
+      }
+      if (updates.qualityScore !== undefined) {
+        fields.push(`quality_score = ?`);
+        values.push(updates.qualityScore);
+      }
+      if (updates.notes !== undefined) {
+        fields.push(`notes = ?`);
+        values.push(updates.notes);
+      }
+
+      if (fields.length === 0) {
+        return await this.getProjectSubphase(id);
+      }
+
+      values.push(id);
+      const result = await db.execute(`UPDATE project_subphases SET ${fields.join(', ')} WHERE id = ? RETURNING *` as any, values);
+
+      return (result as any).rows[0] || undefined;
+    } catch (error) {
+      console.error("Error in updateProjectSubphase:", error);
+      throw error;
+    }
+  }
+
+  async deleteProjectSubphase(id: number): Promise<boolean> {
+    try {
+      const result = await db.execute(`DELETE FROM project_subphases WHERE id = ?` as any, [id]);
+      return (result as any).rowCount > 0;
+    } catch (error) {
+      console.error("Error in deleteProjectSubphase:", error);
+      return false;
+    }
+  }
+
+  // Project Timeline Synchronization methods
+  async syncProjectTimeline(projectId: number): Promise<void> {
+    try {
+      console.log(`🔄 Syncing timeline for project ${projectId}`);
+
+      // Get all project phases with their subphases
+      const projectPhases = await db.execute(`
+        SELECT pp.*, p.name as phase_name
+        FROM project_phases pp
+        JOIN phases p ON pp.phase_id = p.id
+        WHERE pp.project_id = ?
+        ORDER BY p.order_index
+      ` as any, [projectId]);
+
+      const phases = (projectPhases as any).rows || [];
+
+      if (phases.length === 0) {
+        console.log("No phases found for project");
+        return;
+      }
+
+      let projectStartDate: string | null = null;
+      let projectEndDate: string | null = null;
+
+      // Calculate project timeline based on phases
+      for (const phase of phases) {
+        const subphases = await this.getProjectSubphases(phase.id);
+
+        // Calculate phase timeline based on subphases
+        if (subphases.length > 0) {
+          const phaseStartDate = subphases
+            .filter(sp => sp.start_date)
+            .map(sp => sp.start_date)
+            .sort()[0];
+
+          const phaseEndDate = subphases
+            .filter(sp => sp.end_date)
+            .map(sp => sp.end_date)
+            .sort()
+            .reverse()[0];
+
+          // Update phase dates if calculated from subphases
+          if (phaseStartDate && phaseEndDate) {
+            await db.execute(`
+              UPDATE project_phases
+              SET start_date = ?, end_date = ?
+              WHERE id = ?
+            ` as any, [phaseStartDate, phaseEndDate, phase.id]);
+          }
+
+          // Update project timeline
+          if (phaseStartDate && (!projectStartDate || phaseStartDate < projectStartDate)) {
+            projectStartDate = phaseStartDate;
+          }
+          if (phaseEndDate && (!projectEndDate || phaseEndDate > projectEndDate)) {
+            projectEndDate = phaseEndDate;
+          }
+        } else {
+          // Use phase dates directly if no subphases
+          if (phase.start_date && (!projectStartDate || phase.start_date < projectStartDate)) {
+            projectStartDate = phase.start_date;
+          }
+          if (phase.end_date && (!projectEndDate || phase.end_date > projectEndDate)) {
+            projectEndDate = phase.end_date;
+          }
+        }
+      }
+
+      // Update project dates
+      if (projectStartDate && projectEndDate) {
+        await db.execute(`
+          UPDATE projects
+          SET start_date = ?, end_date = ?
+          WHERE id = ?
+        ` as any, [projectStartDate, projectEndDate, projectId]);
+
+        console.log(`✅ Project timeline updated: ${projectStartDate} to ${projectEndDate}`);
+      }
+
+    } catch (error) {
+      console.error("Error in syncProjectTimeline:", error);
+      throw error;
+    }
+  }
+
+  async calculatePhaseProgress(projectPhaseId: number): Promise<number> {
+    try {
+      const subphases = await this.getProjectSubphases(projectPhaseId);
+
+      if (subphases.length === 0) {
+        return 0;
+      }
+
+      const totalProgress = subphases.reduce((sum, subphase) => {
+        return sum + (subphase.progress_percentage || 0);
+      }, 0);
+
+      return Math.round(totalProgress / subphases.length);
+    } catch (error) {
+      console.error("Error in calculatePhaseProgress:", error);
+      return 0;
+    }
+  }
+
+  async updatePhaseProgress(projectPhaseId: number): Promise<void> {
+    try {
+      const progress = await this.calculatePhaseProgress(projectPhaseId);
+
+      await db.execute(`
+        UPDATE project_phases
+        SET progress_percentage = ?
+        WHERE id = ?
+      ` as any, [progress, projectPhaseId]);
+
+      console.log(`✅ Phase ${projectPhaseId} progress updated to ${progress}%`);
+    } catch (error) {
+      console.error("Error in updatePhaseProgress:", error);
+      throw error;
+    }
+  }
+
+  // Work Schedule methods
+  async getWorkSchedules(): Promise<WorkSchedule[]> {
+    return await db.select().from(workSchedules).orderBy(workSchedules.createdAt);
+  }
+
+  async getUserWorkSchedule(userId: number): Promise<(WorkSchedule & { rules: WorkScheduleRule[] }) | undefined> {
+    const schedule = await db
+      .select()
+      .from(workSchedules)
+      .where(and(eq(workSchedules.userId, userId), eq(workSchedules.isActive, true)))
+      .limit(1);
+
+    if (schedule.length === 0) {
+      return undefined;
+    }
+
+    const rules = await db
+      .select()
+      .from(workScheduleRules)
+      .where(eq(workScheduleRules.workScheduleId, schedule[0].id))
+      .orderBy(workScheduleRules.dayOfWeek, workScheduleRules.startTime);
+
+    return {
+      ...schedule[0],
+      rules
+    };
+  }
+
+  async createWorkSchedule(workSchedule: InsertWorkSchedule): Promise<WorkSchedule> {
+    const [created] = await db.insert(workSchedules).values(workSchedule).returning();
+    return created;
+  }
+
+  async updateWorkSchedule(id: number, workSchedule: UpdateWorkSchedule): Promise<WorkSchedule | undefined> {
+    const [updated] = await db
+      .update(workSchedules)
+      .set({ ...workSchedule, updatedAt: new Date().toISOString() })
+      .where(eq(workSchedules.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteWorkSchedule(id: number): Promise<boolean> {
+    const existing = await db.select().from(workSchedules).where(eq(workSchedules.id, id));
+    if (existing.length === 0) {
+      return false;
+    }
+
+    await db.delete(workSchedules).where(eq(workSchedules.id, id));
+
+    const afterDelete = await db.select().from(workSchedules).where(eq(workSchedules.id, id));
+    return afterDelete.length === 0;
+  }
+
+  async getWorkScheduleRules(workScheduleId: number): Promise<WorkScheduleRule[]> {
+    return await db
+      .select()
+      .from(workScheduleRules)
+      .where(eq(workScheduleRules.workScheduleId, workScheduleId))
+      .orderBy(workScheduleRules.dayOfWeek, workScheduleRules.startTime);
+  }
+
+  async createWorkScheduleRule(rule: InsertWorkScheduleRule): Promise<WorkScheduleRule> {
+    const [created] = await db.insert(workScheduleRules).values(rule).returning();
+    return created;
+  }
+
+  async updateWorkScheduleRule(id: number, rule: UpdateWorkScheduleRule): Promise<WorkScheduleRule | undefined> {
+    const [updated] = await db
+      .update(workScheduleRules)
+      .set(rule)
+      .where(eq(workScheduleRules.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteWorkScheduleRule(id: number): Promise<boolean> {
+    const existing = await db.select().from(workScheduleRules).where(eq(workScheduleRules.id, id));
+    if (existing.length === 0) {
+      return false;
+    }
+
+    await db.delete(workScheduleRules).where(eq(workScheduleRules.id, id));
+
+    const afterDelete = await db.select().from(workScheduleRules).where(eq(workScheduleRules.id, id));
+    return afterDelete.length === 0;
+  }
+
   async migrateTimerFields(): Promise<void> {
     try {
       console.log("🔄 Starting timer fields migration...");
@@ -724,6 +2301,496 @@ export class DatabaseStorage implements IStorage {
       console.log("🎉 Timer fields migration completed successfully!");
     } catch (error) {
       console.error("❌ Timer fields migration failed:", error);
+      throw error;
+    }
+  }
+
+  async migrateBiProjectManagement(): Promise<void> {
+    try {
+      console.log("🔄 Starting BI Project Management migration...");
+
+      // Create BI Stages table
+      console.log("📝 Creating BI Stages table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS bi_stages (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          color TEXT DEFAULT '#8B5CF6',
+          order_index INTEGER NOT NULL,
+          estimated_duration_days INTEGER,
+          is_required BOOLEAN DEFAULT true,
+          best_practices TEXT,
+          deliverables TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      ` as any);
+      console.log("✅ BI Stages table created successfully");
+
+      // Create BI Main Tasks table
+      console.log("📝 Creating BI Main Tasks table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS bi_main_tasks (
+          id SERIAL PRIMARY KEY,
+          stage_id INTEGER NOT NULL REFERENCES bi_stages(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          description TEXT,
+          order_index INTEGER NOT NULL,
+          estimated_hours INTEGER,
+          is_required BOOLEAN DEFAULT true,
+          prerequisites TEXT,
+          best_practices TEXT,
+          deliverables TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      ` as any);
+      console.log("✅ BI Main Tasks table created successfully");
+
+      // Create BI Subtasks table
+      console.log("📝 Creating BI Subtasks table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS bi_subtasks (
+          id SERIAL PRIMARY KEY,
+          main_task_id INTEGER NOT NULL REFERENCES bi_main_tasks(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          description TEXT,
+          order_index INTEGER NOT NULL,
+          estimated_minutes INTEGER,
+          is_required BOOLEAN DEFAULT true,
+          skill_level TEXT DEFAULT 'intermediate',
+          tools TEXT,
+          best_practices TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      ` as any);
+      console.log("✅ BI Subtasks table created successfully");
+
+      // Create BI Project Templates table
+      console.log("📝 Creating BI Project Templates table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS bi_project_templates (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          category TEXT NOT NULL,
+          complexity TEXT NOT NULL DEFAULT 'medium',
+          estimated_duration_weeks INTEGER,
+          required_skills TEXT,
+          recommended_team_size INTEGER DEFAULT 1,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      ` as any);
+      console.log("✅ BI Project Templates table created successfully");
+
+      // Create BI Template Stages junction table
+      console.log("📝 Creating BI Template Stages junction table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS bi_template_stages (
+          id SERIAL PRIMARY KEY,
+          template_id INTEGER NOT NULL REFERENCES bi_project_templates(id) ON DELETE CASCADE,
+          stage_id INTEGER NOT NULL REFERENCES bi_stages(id) ON DELETE CASCADE,
+          order_index INTEGER NOT NULL,
+          is_optional BOOLEAN DEFAULT false,
+          custom_duration_days INTEGER,
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(template_id, stage_id)
+        )
+      ` as any);
+      console.log("✅ BI Template Stages junction table created successfully");
+
+      // Add new columns to existing projects table
+      console.log("📝 Adding BI columns to projects table...");
+      const projectMigrationQueries = [
+        `ALTER TABLE projects ADD COLUMN IF NOT EXISTS template_id INTEGER REFERENCES bi_project_templates(id)`,
+        `ALTER TABLE projects ADD COLUMN IF NOT EXISTS bi_category TEXT`,
+        `ALTER TABLE projects ADD COLUMN IF NOT EXISTS current_stage_id INTEGER REFERENCES bi_stages(id)`,
+        `ALTER TABLE projects ADD COLUMN IF NOT EXISTS actual_start_date TEXT`,
+        `ALTER TABLE projects ADD COLUMN IF NOT EXISTS actual_end_date TEXT`,
+        `ALTER TABLE projects ADD COLUMN IF NOT EXISTS progress_percentage INTEGER DEFAULT 0`,
+        `ALTER TABLE projects ADD COLUMN IF NOT EXISTS risk_level TEXT DEFAULT 'low'`,
+        `ALTER TABLE projects ADD COLUMN IF NOT EXISTS stakeholders TEXT`,
+        `ALTER TABLE projects ADD COLUMN IF NOT EXISTS business_value TEXT`,
+        `ALTER TABLE projects ADD COLUMN IF NOT EXISTS technical_requirements TEXT`
+      ];
+
+      for (const query of projectMigrationQueries) {
+        console.log(`📝 Executing: ${query}`);
+        await db.execute(query as any);
+        console.log(`✅ Query executed successfully`);
+      }
+
+      // Create Project Roadmap table
+      console.log("📝 Creating Project Roadmap table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS project_roadmap (
+          id SERIAL PRIMARY KEY,
+          project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          stage_id INTEGER NOT NULL REFERENCES bi_stages(id) ON DELETE CASCADE,
+          order_index INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'not_started',
+          planned_start_date TEXT,
+          planned_end_date TEXT,
+          actual_start_date TEXT,
+          actual_end_date TEXT,
+          progress_percentage INTEGER DEFAULT 0,
+          blockers TEXT,
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(project_id, stage_id)
+        )
+      ` as any);
+      console.log("✅ Project Roadmap table created successfully");
+
+      // Create Project Tasks table
+      console.log("📝 Creating Project Tasks table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS project_tasks (
+          id SERIAL PRIMARY KEY,
+          project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          roadmap_id INTEGER NOT NULL REFERENCES project_roadmap(id) ON DELETE CASCADE,
+          main_task_id INTEGER NOT NULL REFERENCES bi_main_tasks(id) ON DELETE CASCADE,
+          assigned_user_id INTEGER REFERENCES users(id),
+          status TEXT NOT NULL DEFAULT 'not_started',
+          priority TEXT NOT NULL DEFAULT 'medium',
+          planned_start_date TEXT,
+          planned_end_date TEXT,
+          actual_start_date TEXT,
+          actual_end_date TEXT,
+          estimated_hours INTEGER,
+          actual_hours INTEGER DEFAULT 0,
+          progress_percentage INTEGER DEFAULT 0,
+          quality_score INTEGER,
+          review_status TEXT DEFAULT 'pending',
+          deliverables TEXT,
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      ` as any);
+      console.log("✅ Project Tasks table created successfully");
+
+      // Create Project Subtasks table
+      console.log("📝 Creating Project Subtasks table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS project_subtasks (
+          id SERIAL PRIMARY KEY,
+          project_task_id INTEGER NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+          subtask_id INTEGER NOT NULL REFERENCES bi_subtasks(id) ON DELETE CASCADE,
+          assigned_user_id INTEGER REFERENCES users(id),
+          status TEXT NOT NULL DEFAULT 'not_started',
+          planned_duration_minutes INTEGER,
+          actual_duration_minutes INTEGER DEFAULT 0,
+          completed_at TEXT,
+          quality_notes TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      ` as any);
+      console.log("✅ Project Subtasks table created successfully");
+
+      // Create indexes for better performance
+      console.log("📝 Creating indexes...");
+      const indexQueries = [
+        `CREATE INDEX IF NOT EXISTS idx_bi_main_tasks_stage_id ON bi_main_tasks(stage_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_bi_subtasks_main_task_id ON bi_subtasks(main_task_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_bi_template_stages_template_id ON bi_template_stages(template_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_bi_template_stages_stage_id ON bi_template_stages(stage_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_roadmap_project_id ON project_roadmap(project_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_roadmap_stage_id ON project_roadmap(stage_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_tasks_project_id ON project_tasks(project_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_tasks_roadmap_id ON project_tasks(roadmap_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_tasks_main_task_id ON project_tasks(main_task_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_subtasks_project_task_id ON project_subtasks(project_task_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_subtasks_subtask_id ON project_subtasks(subtask_id)`
+      ];
+
+      for (const query of indexQueries) {
+        await db.execute(query as any);
+      }
+      console.log("✅ Indexes created successfully");
+
+      console.log("🎉 BI Project Management migration completed successfully!");
+    } catch (error) {
+      console.error("❌ BI Project Management migration failed:", error);
+      throw error;
+    }
+  }
+
+  async migrateSubphases(): Promise<void> {
+    try {
+      console.log("🔄 Starting Subphases migration...");
+
+      // Enhance phases table with new columns
+      console.log("📝 Enhancing phases table...");
+      const phaseEnhancementQueries = [
+        `ALTER TABLE phases ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0`,
+        `ALTER TABLE phases ADD COLUMN IF NOT EXISTS estimated_duration_days INTEGER`,
+        `ALTER TABLE phases ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`
+      ];
+
+      for (const query of phaseEnhancementQueries) {
+        console.log(`📝 Executing: ${query}`);
+        await db.execute(query as any);
+        console.log("✅ Query executed successfully");
+      }
+
+      // Create subphases table
+      console.log("📝 Creating subphases table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS subphases (
+          id SERIAL PRIMARY KEY,
+          phase_id INTEGER NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          description TEXT,
+          color TEXT,
+          order_index INTEGER DEFAULT 0,
+          estimated_duration_days INTEGER,
+          is_required BOOLEAN DEFAULT true,
+          prerequisites TEXT,
+          deliverables TEXT,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      ` as any);
+      console.log("✅ Subphases table created successfully");
+
+      // Enhance project_phases table with new columns
+      console.log("📝 Enhancing project_phases table...");
+      const projectPhaseEnhancementQueries = [
+        `ALTER TABLE project_phases ADD COLUMN IF NOT EXISTS start_date TEXT`,
+        `ALTER TABLE project_phases ADD COLUMN IF NOT EXISTS end_date TEXT`,
+        `ALTER TABLE project_phases ADD COLUMN IF NOT EXISTS actual_start_date TEXT`,
+        `ALTER TABLE project_phases ADD COLUMN IF NOT EXISTS actual_end_date TEXT`,
+        `ALTER TABLE project_phases ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'not_started'`,
+        `ALTER TABLE project_phases ADD COLUMN IF NOT EXISTS progress_percentage INTEGER DEFAULT 0`,
+        `ALTER TABLE project_phases ADD COLUMN IF NOT EXISTS notes TEXT`
+      ];
+
+      for (const query of projectPhaseEnhancementQueries) {
+        console.log(`📝 Executing: ${query}`);
+        await db.execute(query as any);
+        console.log("✅ Query executed successfully");
+      }
+
+      // Create project_subphases table
+      console.log("📝 Creating project_subphases table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS project_subphases (
+          id SERIAL PRIMARY KEY,
+          project_phase_id INTEGER NOT NULL REFERENCES project_phases(id) ON DELETE CASCADE,
+          subphase_id INTEGER NOT NULL REFERENCES subphases(id) ON DELETE CASCADE,
+          start_date DATE,
+          end_date DATE,
+          actual_start_date DATE,
+          actual_end_date DATE,
+          status TEXT NOT NULL DEFAULT 'not_started',
+          progress_percentage INTEGER DEFAULT 0,
+          assigned_user_id INTEGER REFERENCES users(id),
+          priority TEXT DEFAULT 'medium',
+          estimated_hours INTEGER,
+          actual_hours INTEGER DEFAULT 0,
+          quality_score INTEGER,
+          notes TEXT,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      ` as any);
+      console.log("✅ Project subphases table created successfully");
+
+      // Create indexes for better performance
+      console.log("📝 Creating indexes...");
+      const indexQueries = [
+        `CREATE INDEX IF NOT EXISTS idx_subphases_phase_id ON subphases(phase_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_subphases_order ON subphases(phase_id, order_index)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_subphases_project_phase ON project_subphases(project_phase_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_subphases_subphase ON project_subphases(subphase_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_subphases_assigned_user ON project_subphases(assigned_user_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_subphases_status ON project_subphases(status)`,
+        `CREATE INDEX IF NOT EXISTS idx_project_phases_status ON project_phases(status)`,
+        `CREATE INDEX IF NOT EXISTS idx_phases_order ON phases(order_index)`
+      ];
+
+      for (const query of indexQueries) {
+        console.log(`📝 Executing: ${query}`);
+        await db.execute(query as any);
+        console.log("✅ Index created successfully");
+      }
+
+      console.log("🎉 Subphases migration completed successfully!");
+    } catch (error) {
+      console.error("❌ Subphases migration failed:", error);
+      throw error;
+    }
+  }
+
+  async seedSubphases(): Promise<void> {
+    try {
+      console.log("🌱 Starting subphases seeding...");
+
+      // Check if subphases already exist
+      const existingSubphases = await db.execute(`SELECT COUNT(*) as count FROM subphases` as any);
+      const subphaseCount = (existingSubphases as any).rows[0]?.count || 0;
+
+      if (subphaseCount > 0) {
+        console.log("📋 Subphases already exist, skipping seeding");
+        return;
+      }
+
+      // Get existing phases to create subphases for
+      const phases = await this.getPhases();
+
+      if (phases.length === 0) {
+        console.log("⚠️ No phases found, creating sample phases first");
+
+        // Create sample phases
+        await db.execute(`
+          INSERT INTO phases (name, description, color, order_index, estimated_duration_days, is_active) VALUES
+          ('Planejamento', 'Fase de planejamento e definição do escopo', '#3B82F6', 1, 14, true),
+          ('Desenvolvimento', 'Fase de desenvolvimento e implementação', '#10B981', 2, 30, true),
+          ('Testes', 'Fase de testes e validação', '#F59E0B', 3, 10, true),
+          ('Implantação', 'Fase de implantação e go-live', '#EF4444', 4, 7, true),
+          ('Monitoramento', 'Fase de monitoramento e suporte', '#8B5CF6', 5, 30, true)
+        ` as any);
+        console.log("✅ Sample phases created");
+      }
+
+      // Create subphases for each phase
+      console.log("📝 Creating subphases...");
+
+      // Planejamento subphases
+      await db.execute(`
+        INSERT INTO subphases (phase_id, name, description, color, order_index, estimated_duration_days, is_required, prerequisites, deliverables, is_active) VALUES
+        (1, 'Levantamento de Requisitos', 'Coleta e documentação dos requisitos do projeto', '#3B82F6', 1, 5, true, '[]', '["Documento de Requisitos", "Matriz de Rastreabilidade"]', true),
+        (1, 'Análise de Viabilidade', 'Análise técnica e financeira da viabilidade do projeto', '#3B82F6', 2, 3, true, '[1]', '["Relatório de Viabilidade", "Estimativas de Custo"]', true),
+        (1, 'Definição do Escopo', 'Definição detalhada do escopo e cronograma', '#3B82F6', 3, 4, true, '[1,2]', '["Escopo Detalhado", "Cronograma Preliminar"]', true),
+        (1, 'Aprovação do Projeto', 'Aprovação formal do projeto pelos stakeholders', '#3B82F6', 4, 2, true, '[3]', '["Termo de Abertura", "Aprovação Formal"]', true)
+      ` as any);
+
+      // Desenvolvimento subphases
+      await db.execute(`
+        INSERT INTO subphases (phase_id, name, description, color, order_index, estimated_duration_days, is_required, prerequisites, deliverables, is_active) VALUES
+        (2, 'Arquitetura do Sistema', 'Definição da arquitetura técnica do sistema', '#10B981', 1, 7, true, '[]', '["Documento de Arquitetura", "Diagramas Técnicos"]', true),
+        (2, 'Desenvolvimento Backend', 'Implementação da lógica de negócio e APIs', '#10B981', 2, 12, true, '[5]', '["APIs Implementadas", "Documentação Técnica"]', true),
+        (2, 'Desenvolvimento Frontend', 'Implementação da interface do usuário', '#10B981', 3, 10, true, '[5]', '["Interface Implementada", "Guia do Usuário"]', true),
+        (2, 'Integração de Sistemas', 'Integração com sistemas externos', '#10B981', 4, 5, false, '[6,7]', '["Integrações Funcionais", "Testes de Integração"]', true)
+      ` as any);
+
+      // Testes subphases
+      await db.execute(`
+        INSERT INTO subphases (phase_id, name, description, color, order_index, estimated_duration_days, is_required, prerequisites, deliverables, is_active) VALUES
+        (3, 'Testes Unitários', 'Execução de testes unitários automatizados', '#F59E0B', 1, 3, true, '[]', '["Relatório de Testes Unitários", "Cobertura de Código"]', true),
+        (3, 'Testes de Integração', 'Testes de integração entre componentes', '#F59E0B', 2, 3, true, '[9]', '["Relatório de Testes de Integração"]', true),
+        (3, 'Testes de Aceitação', 'Testes de aceitação com usuários finais', '#F59E0B', 3, 4, true, '[10]', '["Relatório de Testes de Aceitação", "Sign-off dos Usuários"]', true)
+      ` as any);
+
+      // Implantação subphases
+      await db.execute(`
+        INSERT INTO subphases (phase_id, name, description, color, order_index, estimated_duration_days, is_required, prerequisites, deliverables, is_active) VALUES
+        (4, 'Preparação do Ambiente', 'Configuração do ambiente de produção', '#EF4444', 1, 2, true, '[]', '["Ambiente Configurado", "Checklist de Deploy"]', true),
+        (4, 'Deploy em Produção', 'Implantação do sistema em produção', '#EF4444', 2, 1, true, '[12]', '["Sistema em Produção", "Logs de Deploy"]', true),
+        (4, 'Treinamento dos Usuários', 'Treinamento dos usuários finais', '#EF4444', 3, 3, true, '[13]', '["Usuários Treinados", "Material de Treinamento"]', true),
+        (4, 'Go-Live', 'Ativação oficial do sistema', '#EF4444', 4, 1, true, '[14]', '["Sistema Ativo", "Comunicação de Go-Live"]', true)
+      ` as any);
+
+      // Monitoramento subphases
+      await db.execute(`
+        INSERT INTO subphases (phase_id, name, description, color, order_index, estimated_duration_days, is_required, prerequisites, deliverables, is_active) VALUES
+        (5, 'Monitoramento Inicial', 'Monitoramento intensivo pós go-live', '#8B5CF6', 1, 7, true, '[]', '["Relatórios de Monitoramento", "Métricas de Performance"]', true),
+        (5, 'Correções e Ajustes', 'Correção de problemas identificados', '#8B5CF6', 2, 10, false, '[16]', '["Problemas Corrigidos", "Melhorias Implementadas"]', true),
+        (5, 'Documentação Final', 'Finalização da documentação do projeto', '#8B5CF6', 3, 5, true, '[17]', '["Documentação Completa", "Manual do Sistema"]', true),
+        (5, 'Encerramento do Projeto', 'Encerramento formal do projeto', '#8B5CF6', 4, 3, true, '[18]', '["Termo de Encerramento", "Lições Aprendidas"]', true)
+      ` as any);
+
+      console.log("✅ Subphases seeded successfully");
+      console.log("🎉 Subphases seeding completed successfully!");
+    } catch (error) {
+      console.error("❌ Subphases seeding failed:", error);
+      throw error;
+    }
+  }
+
+  async seedBiMethodology(): Promise<void> {
+    try {
+      console.log("🌱 Starting BI Methodology seeding...");
+
+      // Check if data already exists
+      const existingStages = await db.execute(`SELECT COUNT(*) as count FROM bi_stages` as any);
+      const stageCount = (existingStages as any).rows[0]?.count || 0;
+
+      const existingTemplates = await db.execute(`SELECT COUNT(*) as count FROM bi_project_templates` as any);
+      const templateCount = (existingTemplates as any).rows[0]?.count || 0;
+
+      const existingMainTasks = await db.execute(`SELECT COUNT(*) as count FROM bi_main_tasks` as any);
+      const mainTaskCount = (existingMainTasks as any).rows[0]?.count || 0;
+
+      if (stageCount > 0 && templateCount > 0 && mainTaskCount > 0) {
+        console.log("📋 BI Methodology data already exists, skipping seeding");
+        return;
+      }
+
+      // Insert BI Stages
+      console.log("📝 Inserting BI Stages...");
+      await db.execute(`
+        INSERT INTO bi_stages (name, description, color, order_index, estimated_duration_days, is_required, best_practices, deliverables) VALUES
+        ('Business Analysis & Requirements', 'Understanding business needs, defining requirements, and establishing project scope', '#3B82F6', 1, 10, true, '["Conduct stakeholder interviews", "Document current state processes", "Define success metrics", "Validate requirements with business users"]', '["Business Requirements Document", "Stakeholder Analysis", "Success Criteria", "Project Charter"]'),
+        ('Data Discovery & Assessment', 'Analyzing existing data sources, quality assessment, and data mapping', '#10B981', 2, 7, true, '["Profile all data sources", "Document data lineage", "Assess data quality issues", "Identify data gaps"]', '["Data Inventory", "Data Quality Report", "Source-to-Target Mapping", "Data Governance Plan"]'),
+        ('Architecture & Design', 'Designing the technical architecture, data models, and solution blueprint', '#F59E0B', 3, 14, true, '["Follow dimensional modeling principles", "Design for scalability", "Consider security requirements", "Plan for data governance"]', '["Technical Architecture Document", "Data Model", "ETL Design", "Security Plan"]'),
+        ('Development & Implementation', 'Building ETL processes, data warehouse, and BI solutions', '#EF4444', 4, 21, true, '["Use version control", "Implement automated testing", "Follow coding standards", "Document all processes"]', '["ETL Processes", "Data Warehouse", "BI Reports/Dashboards", "Technical Documentation"]'),
+        ('Testing & Quality Assurance', 'Comprehensive testing of data accuracy, performance, and user acceptance', '#8B5CF6', 5, 10, true, '["Test data accuracy end-to-end", "Validate business rules", "Performance testing", "User acceptance testing"]', '["Test Plans", "Test Results", "Performance Reports", "UAT Sign-off"]'),
+        ('Deployment & Go-Live', 'Production deployment, user training, and go-live activities', '#06B6D4', 6, 5, true, '["Plan deployment carefully", "Provide comprehensive training", "Monitor closely post-deployment", "Have rollback plan ready"]', '["Deployment Guide", "Training Materials", "Go-Live Checklist", "Support Documentation"]'),
+        ('Monitoring & Optimization', 'Post-deployment monitoring, performance optimization, and continuous improvement', '#6B7280', 7, 30, false, '["Monitor system performance", "Track usage metrics", "Gather user feedback", "Plan iterative improvements"]', '["Monitoring Dashboard", "Performance Reports", "User Feedback Analysis", "Improvement Roadmap"]')
+        ON CONFLICT (order_index) DO NOTHING
+      ` as any);
+      console.log("✅ BI Stages inserted successfully");
+
+      // Insert BI Project Templates
+      console.log("📝 Inserting BI Project Templates...");
+      await db.execute(`
+        INSERT INTO bi_project_templates (name, description, category, complexity, estimated_duration_weeks, required_skills, recommended_team_size, is_active) VALUES
+        ('Standard Data Warehouse Project', 'Complete data warehouse implementation with ETL processes and reporting', 'data_warehouse', 'complex', 16, '["SQL", "ETL Tools", "Data Modeling", "Business Analysis", "Data Visualization"]', 4, true),
+        ('Business Intelligence Dashboard', 'Interactive dashboard development with data integration', 'reporting', 'medium', 8, '["SQL", "BI Tools", "Data Visualization", "Business Analysis"]', 2, true),
+        ('Data Analytics Platform', 'Advanced analytics platform with machine learning capabilities', 'analytics', 'complex', 20, '["Python/R", "Machine Learning", "SQL", "Data Engineering", "Statistics"]', 5, true),
+        ('ETL Process Implementation', 'Focused ETL development for data integration', 'etl', 'medium', 6, '["SQL", "ETL Tools", "Data Integration", "Data Quality"]', 2, true),
+        ('Quick Reporting Solution', 'Rapid development of basic reports and dashboards', 'reporting', 'simple', 4, '["SQL", "Reporting Tools", "Data Visualization"]', 1, true)
+        ON CONFLICT (name) DO NOTHING
+      ` as any);
+      console.log("✅ BI Project Templates inserted successfully");
+
+      // Link templates to stages (Standard Data Warehouse Project - includes all stages)
+      console.log("📝 Linking templates to stages...");
+      await db.execute(`
+        INSERT INTO bi_template_stages (template_id, stage_id, order_index, is_optional, custom_duration_days) VALUES
+        (1, 1, 1, false, 10), (1, 2, 2, false, 7), (1, 3, 3, false, 14), (1, 4, 4, false, 21), (1, 5, 5, false, 10), (1, 6, 6, false, 5), (1, 7, 7, true, 30),
+        (2, 1, 1, false, 5), (2, 2, 2, false, 3), (2, 3, 3, false, 7), (2, 4, 4, false, 10), (2, 5, 5, false, 5), (2, 6, 6, false, 3), (2, 7, 7, true, 15),
+        (3, 1, 1, false, 12), (3, 2, 2, false, 10), (3, 3, 3, false, 18), (3, 4, 4, false, 28), (3, 5, 5, false, 14), (3, 6, 6, false, 7), (3, 7, 7, false, 45)
+        ON CONFLICT (template_id, stage_id) DO NOTHING
+      ` as any);
+      console.log("✅ Template-stage relationships created successfully");
+
+      // Insert sample BI Main Tasks for the first stage (Business Analysis & Requirements)
+      console.log("📝 Inserting sample BI Main Tasks...");
+      await db.execute(`
+        INSERT INTO bi_main_tasks (stage_id, name, description, order_index, estimated_hours, is_required, prerequisites, best_practices, deliverables) VALUES
+        (1, 'Stakeholder Analysis & Interviews', 'Identify and interview key stakeholders to understand business needs', 1, 16, true, '[]', '["Prepare structured interview questions", "Include both business and technical stakeholders", "Document all requirements clearly"]', '["Stakeholder Matrix", "Interview Notes", "Initial Requirements List"]'),
+        (1, 'Current State Analysis', 'Analyze existing processes, systems, and reporting capabilities', 2, 12, true, '[1]', '["Map current data flows", "Identify pain points", "Document existing reports", "Assess current tools"]', '["Current State Documentation", "Process Maps", "Gap Analysis"]'),
+        (1, 'Requirements Definition', 'Define detailed functional and non-functional requirements', 3, 20, true, '[1,2]', '["Use clear, measurable language", "Prioritize requirements", "Include data quality requirements", "Define acceptance criteria"]', '["Business Requirements Document", "Functional Specifications", "Non-functional Requirements"]')
+        ON CONFLICT (stage_id, order_index) DO NOTHING
+      ` as any);
+      console.log("✅ BI Main Tasks inserted successfully");
+
+      // Insert sample BI Subtasks for the first main task
+      console.log("📝 Inserting sample BI Subtasks...");
+      await db.execute(`
+        INSERT INTO bi_subtasks (main_task_id, name, description, order_index, estimated_minutes, is_required, skill_level, tools, best_practices) VALUES
+        (1, 'Prepare Stakeholder Interview Questions', 'Create structured questions for different stakeholder types', 1, 60, true, 'intermediate', '["Microsoft Word", "Google Docs", "Interview Templates"]', '["Tailor questions to stakeholder role", "Include both open and closed questions", "Prepare follow-up questions"]'),
+        (1, 'Schedule Stakeholder Interviews', 'Coordinate and schedule interviews with all key stakeholders', 2, 45, true, 'beginner', '["Outlook", "Google Calendar", "Calendly"]', '["Allow sufficient time for each interview", "Send agenda in advance", "Confirm attendance"]'),
+        (1, 'Conduct Stakeholder Interviews', 'Execute interviews and document findings', 3, 240, true, 'intermediate', '["Teams", "Zoom", "Recording Software", "Note-taking Apps"]', '["Record sessions with permission", "Take detailed notes", "Ask clarifying questions", "Summarize key points"]'),
+        (1, 'Analyze Interview Results', 'Synthesize interview findings and identify common themes', 4, 120, true, 'intermediate', '["Excel", "Miro", "Confluence", "Analysis Tools"]', '["Look for patterns and themes", "Identify conflicting requirements", "Prioritize findings", "Validate understanding"]')
+        ON CONFLICT (main_task_id, order_index) DO NOTHING
+      ` as any);
+      console.log("✅ BI Subtasks inserted successfully");
+
+      console.log("🎉 BI Methodology seeding completed successfully!");
+    } catch (error) {
+      console.error("❌ BI Methodology seeding failed:", error);
       throw error;
     }
   }

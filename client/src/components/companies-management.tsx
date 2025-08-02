@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { CustomModal } from "@/components/ui/custom-modal";
-import { Building2, Plus, Edit, Trash2, Mail, Phone, Globe } from "lucide-react";
+import { Building2, Plus, Edit, Trash2, Mail, Phone, Globe, FolderOpen, ChevronDown, ChevronUp } from "lucide-react";
 
 interface CompanyFormData {
   name: string;
@@ -33,9 +33,22 @@ interface Company {
   createdAt: string;
 }
 
+interface Project {
+  id: number;
+  name: string;
+  description?: string;
+  companyId?: number;
+  status: string;
+  priority: string;
+  startDate?: string;
+  endDate?: string;
+  color: string;
+}
+
 export default function CompaniesManagement() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [expandedCompanies, setExpandedCompanies] = useState<Set<number>>(new Set());
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -74,6 +87,27 @@ export default function CompaniesManagement() {
   const { data: companies = [], isLoading } = useQuery({
     queryKey: ["/api/companies"],
   });
+
+  // Fetch projects
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+  });
+
+  // Helper function to get projects for a company
+  const getCompanyProjects = (companyId: number): Project[] => {
+    return projects.filter(project => project.companyId === companyId);
+  };
+
+  // Helper function to toggle company expansion
+  const toggleCompanyExpansion = (companyId: number) => {
+    const newExpanded = new Set(expandedCompanies);
+    if (newExpanded.has(companyId)) {
+      newExpanded.delete(companyId);
+    } else {
+      newExpanded.add(companyId);
+    }
+    setExpandedCompanies(newExpanded);
+  };
 
   // Validate form
   const validateForm = (): boolean => {
@@ -349,23 +383,95 @@ export default function CompaniesManagement() {
       </CustomModal>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {companies.map((company: Company) => (
-          <Card key={company.id} className="hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-2">
-                  <Building2 className="w-5 h-5 text-blue-600" />
-                  <CardTitle className="text-lg">{company.name}</CardTitle>
+        {companies.map((company: Company) => {
+          const companyProjects = getCompanyProjects(company.id);
+          const isExpanded = expandedCompanies.has(company.id);
+
+          return (
+            <Card key={company.id} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Building2 className="w-5 h-5 text-blue-600" />
+                    <CardTitle className="text-lg">{company.name}</CardTitle>
+                  </div>
+                  <Badge variant={company.type === "internal" ? "default" : "secondary"}>
+                    {company.type === "internal" ? "Interna" : "Cliente"}
+                  </Badge>
                 </div>
-                <Badge variant={company.type === "internal" ? "default" : "secondary"}>
-                  {company.type === "internal" ? "Interna" : "Cliente"}
-                </Badge>
-              </div>
-              {company.description && (
-                <CardDescription>{company.description}</CardDescription>
-              )}
-            </CardHeader>
+                {company.description && (
+                  <CardDescription>{company.description}</CardDescription>
+                )}
+
+                {/* Projects Summary */}
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex items-center space-x-2">
+                    <FolderOpen className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm text-gray-600">
+                      {companyProjects.length} projeto{companyProjects.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {companyProjects.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleCompanyExpansion(company.id)}
+                      className="h-6 px-2"
+                    >
+                      {isExpanded ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
             <CardContent className="space-y-2">
+              {/* Expanded Projects List */}
+              {isExpanded && companyProjects.length > 0 && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Projetos:</h4>
+                  <div className="space-y-2">
+                    {companyProjects.map((project) => (
+                      <div key={project.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                        <div className="flex items-center space-x-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: project.color }}
+                          />
+                          <span className="text-sm font-medium">{project.name}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Badge
+                            variant={project.status === 'active' ? 'default' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {project.status === 'active' ? 'Ativo' :
+                             project.status === 'completed' ? 'Concluído' :
+                             project.status === 'on_hold' ? 'Pausado' : 'Cancelado'}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${
+                              project.priority === 'urgent' ? 'border-red-500 text-red-700' :
+                              project.priority === 'high' ? 'border-orange-500 text-orange-700' :
+                              project.priority === 'medium' ? 'border-blue-500 text-blue-700' :
+                              'border-gray-500 text-gray-700'
+                            }`}
+                          >
+                            {project.priority === 'urgent' ? 'Urgente' :
+                             project.priority === 'high' ? 'Alta' :
+                             project.priority === 'medium' ? 'Média' : 'Baixa'}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Company Contact Information */}
               {company.email && (
                 <div className="flex items-center space-x-2 text-sm text-gray-600">
                   <Mail className="w-4 h-4" />
@@ -386,11 +492,14 @@ export default function CompaniesManagement() {
                   </a>
                 </div>
               )}
+
+              {/* Action Buttons */}
               <div className="flex justify-end space-x-2 pt-2">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => handleEdit(company)}
+                  title="Editar empresa"
                 >
                   <Edit className="w-4 h-4" />
                 </Button>
@@ -399,13 +508,15 @@ export default function CompaniesManagement() {
                   variant="outline"
                   onClick={() => handleDelete(company.id)}
                   className="text-red-600 hover:text-red-700"
+                  title="Excluir empresa"
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {companies.length === 0 && (

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Phase Cleanup</title>
+</head>
+<body>
+    <h1>Phase Cleanup Tool</h1>
+    <button onclick="checkStatus()">Check Current Status</button>
+    <button onclick="completeCleanup()">Complete Cleanup</button>
+    <button onclick="deletePhases()">Delete Phases 117 & 393</button>
+    <button onclick="forceDeletePhases()" style="background-color: red; color: white;">FORCE DELETE Phases 117 & 393</button>
+    <button onclick="nuclearDelete()" style="background-color: darkred; color: white; font-weight: bold;">💥 NUCLEAR DELETE 117 & 393</button>
+    
+    <div id="output" style="margin-top: 20px; padding: 10px; background: #f0f0f0; white-space: pre-wrap;"></div>
+
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message) {
+            output.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+        }
+        
+        async function checkStatus() {
+            try {
+                log('Checking current status...');
+                const response = await fetch('/api/debug/phases-in-use');
+                const data = await response.json();
+                log('Status: ' + JSON.stringify(data, null, 2));
+            } catch (error) {
+                log('Error: ' + error.message);
+            }
+        }
+        
+        async function completeCleanup() {
+            try {
+                log('Starting complete cleanup...');
+                const response = await fetch('/api/phases/complete-cleanup', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                log('Cleanup result: ' + JSON.stringify(data, null, 2));
+            } catch (error) {
+                log('Error: ' + error.message);
+            }
+        }
+        
+        async function deletePhases() {
+            try {
+                log('Attempting to delete phase 117...');
+                let response = await fetch('/api/phases/117', { method: 'DELETE' });
+                let data = await response.json();
+                log('Phase 117 result: ' + JSON.stringify(data, null, 2));
+
+                log('Attempting to delete phase 393...');
+                response = await fetch('/api/phases/393', { method: 'DELETE' });
+                data = await response.json();
+                log('Phase 393 result: ' + JSON.stringify(data, null, 2));
+            } catch (error) {
+                log('Error: ' + error.message);
+            }
+        }
+
+        async function forceDeletePhases() {
+            try {
+                log('FORCE DELETING phase 117...');
+                let response = await fetch('/api/phases/117?force=true', { method: 'DELETE' });
+                let data = await response.json();
+                log('FORCE DELETE Phase 117 result: ' + JSON.stringify(data, null, 2));
+
+                log('FORCE DELETING phase 393...');
+                response = await fetch('/api/phases/393?force=true', { method: 'DELETE' });
+                data = await response.json();
+                log('FORCE DELETE Phase 393 result: ' + JSON.stringify(data, null, 2));
+
+                // Check status after force deletion
+                await checkStatus();
+            } catch (error) {
+                log('Error: ' + error.message);
+            }
+        }
+
+        async function nuclearDelete() {
+            try {
+                log('💥 NUCLEAR DELETE: Starting complete removal of phases 117 and 393...');
+                const response = await fetch('/api/phases/nuclear-delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        phaseIds: [117, 393]
+                    })
+                });
+                const data = await response.json();
+                log('💥 NUCLEAR DELETE result: ' + JSON.stringify(data, null, 2));
+
+                // Check status after nuclear deletion
+                await checkStatus();
+            } catch (error) {
+                log('Error: ' + error.message);
+            }
+        }
+        
+        // Auto-check status on load
+        window.onload = checkStatus;
+    </script>
+</body>
+</html>

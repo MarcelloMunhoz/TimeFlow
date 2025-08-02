@@ -101,32 +101,34 @@ export default function ConflictWarningDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-red-600">
-            <AlertTriangle className="w-5 h-5" />
-            Conflito de Agendamento Detectado
+          <DialogTitle className="flex items-center gap-2 text-red-600 text-xl">
+            <AlertTriangle className="w-6 h-6" />
+            Conflito de Horário Detectado
           </DialogTitle>
-          <DialogDescription>
-            O horário selecionado conflita com {conflictingAppointments.length} agendamento(s) existente(s).
-            Você pode prosseguir com um "encaixe" ou escolher um horário diferente.
+          <DialogDescription className="text-base leading-relaxed">
+            O horário selecionado <strong>conflita com {conflictingAppointments.length} agendamento(s) existente(s)</strong>.
+            <br />
+            <span className="text-blue-600 font-medium">Você pode escolher um horário diferente</span> ou
+            <span className="text-amber-600 font-medium"> prosseguir com um "encaixe" (sobreposição intencional)</span>.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* New Appointment Summary */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              Novo Agendamento
+          {/* New Appointment Summary - Improved layout */}
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+            <h4 className="font-semibold text-blue-900 mb-3 flex items-center gap-2 text-base">
+              <Calendar className="w-5 h-5" />
+              Novo Agendamento que Você Quer Criar
             </h4>
-            <div className="space-y-2 text-sm">
-              <div className="font-medium text-blue-800">{newAppointment.title}</div>
-              <div className="flex items-center gap-4 text-blue-700">
-                <div className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {newAppointment.startTime} - {newEndTime}
+            <div className="space-y-3">
+              <div className="font-medium text-blue-800 text-base">{newAppointment.title}</div>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-blue-700">
+                <div className="flex items-center gap-2 bg-blue-100 px-3 py-1 rounded-full">
+                  <Clock className="w-4 h-4" />
+                  <span className="font-medium">{newAppointment.startTime} - {newEndTime}</span>
                 </div>
-                <div>
-                  {newAppointment.durationMinutes} minutos
+                <div className="flex items-center gap-1">
+                  <span>⏱️ {newAppointment.durationMinutes} minutos</span>
                 </div>
               </div>
             </div>
@@ -144,52 +146,63 @@ export default function ConflictWarningDialog({
                 
                 return (
                   <div key={appointment.id || index} className="border border-red-200 rounded-lg p-4 bg-red-50">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="font-medium text-red-900 mb-1">
-                          {appointment.title}
+                    <div className="space-y-3">
+                      {/* Title and Status */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-red-900 text-base truncate">
+                            {appointment.title}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-red-700">
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {appointment.startTime} - {endTime}
-                          </div>
-                          <div>
-                            {appointment.durationMinutes} minutos
-                          </div>
+                        <Badge className={cn("text-xs flex-shrink-0", getStatusColor(appointment.status))}>
+                          {getStatusLabel(appointment.status)}
+                        </Badge>
+                      </div>
+
+                      {/* Time Information */}
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-red-700">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          <span className="font-medium">{appointment.startTime} - {endTime}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>⏱️ {appointment.durationMinutes} minutos</span>
                         </div>
                       </div>
-                      <Badge className={cn("text-xs", getStatusColor(appointment.status))}>
-                        {getStatusLabel(appointment.status)}
-                      </Badge>
                     </div>
 
+                    {/* Description */}
                     {appointment.description && (
-                      <p className="text-sm text-red-600 mb-2">
-                        {appointment.description}
-                      </p>
+                      <div className="mt-2 p-2 bg-white rounded border border-red-100">
+                        <p className="text-sm text-red-700 leading-relaxed">
+                          {appointment.description}
+                        </p>
+                      </div>
                     )}
 
-                    <div className="flex items-center gap-4 text-xs text-red-600">
-                      {appointment.companyId && (
-                        <div className="flex items-center gap-1">
-                          <Building2 className="w-3 h-3" />
-                          <span>Empresa ID: {appointment.companyId}</span>
-                        </div>
-                      )}
-                      {appointment.projectId && (
-                        <div className="flex items-center gap-1">
-                          <FolderOpen className="w-3 h-3" />
-                          <span>Projeto ID: {appointment.projectId}</span>
-                        </div>
-                      )}
-                      {appointment.userId && (
-                        <div className="flex items-center gap-1">
-                          <User className="w-3 h-3" />
-                          <span>Usuário ID: {appointment.userId}</span>
-                        </div>
-                      )}
-                    </div>
+                    {/* Additional Information */}
+                    {(appointment.companyId || appointment.projectId || appointment.userId) && (
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-red-600 pt-2 border-t border-red-200">
+                        {appointment.companyId && (
+                          <div className="flex items-center gap-1">
+                            <Building2 className="w-3 h-3" />
+                            <span>Empresa: {appointment.companyId}</span>
+                          </div>
+                        )}
+                        {appointment.projectId && (
+                          <div className="flex items-center gap-1">
+                            <FolderOpen className="w-3 h-3" />
+                            <span>Projeto: {appointment.projectId}</span>
+                          </div>
+                        )}
+                        {appointment.userId && (
+                          <div className="flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            <span>Usuário: {appointment.userId}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -223,55 +236,73 @@ export default function ConflictWarningDialog({
             </div>
           )}
 
-          {/* Warning Alert */}
-          <Alert className="border-amber-200 bg-amber-50">
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
-            <AlertDescription className="text-amber-800">
-              <strong>Atenção:</strong> Prosseguir com o "encaixe" criará agendamentos sobrepostos. 
-              Certifique-se de que isso é intencional e que você pode gerenciar ambos os compromissos.
+          {/* Warning Alert - More prominent */}
+          <Alert className="border-amber-300 bg-amber-50 border-2">
+            <AlertTriangle className="w-5 h-5 text-amber-600" />
+            <AlertDescription className="text-amber-900">
+              <div className="space-y-2">
+                <div className="font-semibold text-base">⚠️ O que significa "Encaixe"?</div>
+                <div className="text-sm leading-relaxed">
+                  • Você terá <strong>dois agendamentos no mesmo horário</strong><br />
+                  • Ambos aparecerão na sua agenda como compromissos ativos<br />
+                  • Você é responsável por gerenciar essa sobreposição<br />
+                  • Use apenas quando for realmente necessário
+                </div>
+              </div>
             </AlertDescription>
           </Alert>
 
-          {/* Acknowledgment Checkbox */}
-          <div className="flex items-start space-x-2">
-            <Checkbox
-              id="acknowledge-overlap"
-              checked={acknowledgeOverlap}
-              onCheckedChange={setAcknowledgeOverlap}
-            />
-            <label
-              htmlFor="acknowledge-overlap"
-              className="text-sm text-gray-700 leading-relaxed cursor-pointer"
-            >
-              Eu entendo que estou criando um agendamento sobreposto e assumo a responsabilidade 
-              de gerenciar ambos os compromissos adequadamente.
-            </label>
+          {/* Acknowledgment Checkbox - More prominent */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <Checkbox
+                id="acknowledge-overlap"
+                checked={acknowledgeOverlap}
+                onCheckedChange={setAcknowledgeOverlap}
+                className="mt-1 data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600"
+              />
+              <label
+                htmlFor="acknowledge-overlap"
+                className="text-sm text-amber-800 leading-relaxed cursor-pointer font-medium"
+              >
+                ✓ Eu entendo que estou criando um agendamento sobreposto e assumo a responsabilidade
+                de gerenciar ambos os compromissos adequadamente.
+              </label>
+            </div>
+            {!acknowledgeOverlap && (
+              <p className="text-xs text-amber-600 mt-2 ml-7">
+                Você deve confirmar que entende as implicações antes de prosseguir.
+              </p>
+            )}
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          <div className="flex gap-2 w-full sm:w-auto">
-            <Button
-              variant="outline"
-              onClick={handleClose}
-              className="flex-1 sm:flex-none"
-            >
-              Cancelar
-            </Button>
+        <DialogFooter className="flex-col gap-3 pt-6">
+          {/* Primary Actions - More prominent */}
+          <div className="flex flex-col sm:flex-row gap-3 w-full">
             <Button
               variant="outline"
               onClick={handleSelectDifferentTime}
-              className="flex-1 sm:flex-none border-blue-200 text-blue-700 hover:bg-blue-50"
+              className="flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-300 font-medium"
             >
-              Escolher Outro Horário
+              ✓ Escolher Outro Horário
+            </Button>
+            <Button
+              onClick={handleProceedWithOverlap}
+              disabled={!acknowledgeOverlap}
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ⚠️ Prosseguir com Encaixe
             </Button>
           </div>
+
+          {/* Secondary Action */}
           <Button
-            onClick={handleProceedWithOverlap}
-            disabled={!acknowledgeOverlap}
-            className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 text-white"
+            variant="ghost"
+            onClick={handleClose}
+            className="w-full text-gray-500 hover:text-gray-700 hover:bg-gray-50"
           >
-            Prosseguir com Encaixe
+            Cancelar
           </Button>
         </DialogFooter>
       </DialogContent>
