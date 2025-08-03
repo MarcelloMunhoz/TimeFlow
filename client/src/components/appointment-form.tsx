@@ -115,7 +115,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
 
   // Filter projects based on selected company
   const filteredProjects = selectedCompanyId && selectedCompanyId !== "none"
-    ? projects.filter((project: any) => project.companyId === parseInt(selectedCompanyId))
+    ? (projects as any[]).filter((project: any) => project.companyId === parseInt(selectedCompanyId))
     : projects;
 
   // Fetch phases for the selected project
@@ -135,7 +135,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
     if (currentProjectId && currentProjectId !== "none") {
       if (selectedCompanyId && selectedCompanyId !== "none") {
         // Company is selected - check if current project belongs to it
-        const currentProject = projects.find((project: any) => project.id === parseInt(currentProjectId));
+        const currentProject = (projects as any[]).find((project: any) => project.id === parseInt(currentProjectId));
         if (currentProject && currentProject.companyId !== parseInt(selectedCompanyId)) {
           // Clear project selection if it doesn't belong to the selected company
           form.setValue("projectId", "none");
@@ -360,7 +360,9 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                       <FormControl>
                         <Textarea
                           rows={3}
-                          placeholder="Descreva os detalhes do agendamento..."
+                          placeholder="Descreva os detalhes do agendamento, objetivos e informações importantes..."
+                          maxLength={1000}
+
                           {...field}
                           value={field.value || ""}
                         />
@@ -532,7 +534,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="none">Nenhuma</SelectItem>
-                            {companies.map((company: any) => (
+                            {(companies as any[]).filter((company: any) => company.id && company.id.toString().trim() !== "").map((company: any) => (
                               <SelectItem key={company.id} value={company.id.toString()}>
                                 {company.name}
                               </SelectItem>
@@ -560,13 +562,13 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                         <Select
                           onValueChange={field.onChange}
                           value={field.value}
-                          disabled={selectedCompanyId && selectedCompanyId !== "none" && filteredProjects.length === 0}
+                          disabled={!!(selectedCompanyId && selectedCompanyId !== "none" && (filteredProjects as any[]).length === 0)}
                         >
                           <FormControl>
                             <SelectTrigger className="h-8 text-xs">
                               <SelectValue
                                 placeholder={
-                                  selectedCompanyId && selectedCompanyId !== "none" && filteredProjects.length === 0
+                                  selectedCompanyId && selectedCompanyId !== "none" && (filteredProjects as any[]).length === 0
                                     ? "Nenhum projeto disponível"
                                     : "Selecionar projeto..."
                                 }
@@ -577,15 +579,15 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                             <SelectItem value="none">Nenhum</SelectItem>
                             {selectedCompanyId && selectedCompanyId !== "none" ? (
                               // Show only projects from selected company
-                              filteredProjects.map((project: any) => (
+                              (filteredProjects as any[]).filter((project: any) => project.id && project.id.toString().trim() !== "").map((project: any) => (
                                 <SelectItem key={project.id} value={project.id.toString()}>
                                   {project.name}
                                 </SelectItem>
                               ))
                             ) : (
                               // Show all projects with company information
-                              projects.map((project: any) => {
-                                const projectCompany = companies.find((company: any) => company.id === project.companyId);
+                              (projects as any[]).filter((project: any) => project.id && project.id.toString().trim() !== "").map((project: any) => {
+                                const projectCompany = (companies as any[]).find((company: any) => company.id === project.companyId);
                                 return (
                                   <SelectItem key={project.id} value={project.id.toString()}>
                                     <div className="flex flex-col">
@@ -603,7 +605,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                           </SelectContent>
                         </Select>
                         <FormMessage />
-                        {selectedCompanyId && selectedCompanyId !== "none" && filteredProjects.length === 0 && (
+                        {selectedCompanyId && selectedCompanyId !== "none" && (filteredProjects as any[]).length === 0 && (
                           <p className="text-xs text-amber-600 mt-1">
                             Nenhum projeto encontrado para a empresa selecionada
                           </p>
@@ -626,7 +628,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="none">Nenhuma</SelectItem>
-                            {users.map((user: any) => (
+                            {(users as any[]).filter((user: any) => user.id && user.id.toString().trim() !== "").map((user: any) => (
                               <SelectItem key={user.id} value={user.id.toString()}>
                                 {user.name}
                               </SelectItem>
@@ -671,9 +673,12 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="none">Nenhuma</SelectItem>
-                            {projectPhases.map((projectPhase: any) => (
+                            {projectPhases.filter((projectPhase: any) => projectPhase.phaseId && projectPhase.phaseId.toString().trim() !== "").map((projectPhase: any) => (
                               <SelectItem key={projectPhase.phaseId} value={projectPhase.phaseId.toString()}>
                                 <div className="flex items-center space-x-2">
+                                  <span className="text-xs font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                    #{projectPhase.phase.orderIndex || 1}
+                                  </span>
                                   <div
                                     className="w-3 h-3 rounded-full"
                                     style={{ backgroundColor: projectPhase.phase.color }}

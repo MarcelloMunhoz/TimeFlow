@@ -1,15 +1,118 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CalendarCheck, Plus, Search, Download, List, Calendar as CalendarIcon, User, Settings } from "lucide-react";
+import { CalendarCheck, Plus, Search, Download, List, Calendar as CalendarIcon, User, Settings, TrendingUp, AlertTriangle, Target, Clock } from "lucide-react";
 import ProductivityMetrics from "@/components/productivity-metrics";
 import CalendarView from "@/components/calendar-view";
 import TaskList from "@/components/task-list";
 import AppointmentForm from "@/components/appointment-form";
 import { getTodayString } from "@/lib/date-utils";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 type ViewMode = "month" | "week" | "day";
+
+// Project Status Card Component
+function ProjectStatusCard() {
+  const { data: projects } = useQuery({
+    queryKey: ["/api/projects"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/projects");
+      return response.json();
+    }
+  });
+
+  const activeProjects = projects?.filter((p: any) => p.status === 'active') || [];
+  const completedProjects = projects?.filter((p: any) => p.status === 'completed') || [];
+  const atRiskProjects = activeProjects.filter((p: any) => {
+    const isOverdue = p.endDate && new Date(p.endDate) < new Date();
+    return isOverdue || p.riskLevel === 'high';
+  });
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+        <TrendingUp className="w-5 h-5 mr-2 text-blue-600" />
+        Status dos Projetos
+      </h3>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-gray-600">Projetos Ativos</span>
+          <span className="text-lg font-semibold text-blue-600">{activeProjects.length}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-gray-600">Concluídos</span>
+          <span className="text-lg font-semibold text-green-600">{completedProjects.length}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-gray-600 flex items-center">
+            <AlertTriangle className="w-4 h-4 mr-1 text-orange-500" />
+            Em Risco
+          </span>
+          <span className="text-lg font-semibold text-orange-600">{atRiskProjects.length}</span>
+        </div>
+        {activeProjects.length > 0 && (
+          <div className="pt-2 border-t">
+            <div className="text-xs text-gray-500 mb-2">Progresso Médio</div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.max(0, Math.min(100, activeProjects.reduce((acc: number, p: any) => acc + (p.progressPercentage || 0), 0) / activeProjects.length))}%`
+                }}
+              />
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              {Math.round(activeProjects.reduce((acc: number, p: any) => acc + (p.progressPercentage || 0), 0) / activeProjects.length)}% concluído
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Quick Actions Card Component
+function QuickActionsCard() {
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+        <Target className="w-5 h-5 mr-2 text-green-600" />
+        Ações Rápidas
+      </h3>
+      <div className="space-y-3">
+        <Link href="/management">
+          <Button variant="outline" className="w-full justify-start">
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Projeto BI
+          </Button>
+        </Link>
+        <Link href="/management">
+          <Button variant="outline" className="w-full justify-start">
+            <TrendingUp className="w-4 h-4 mr-2" />
+            Ver KPIs
+          </Button>
+        </Link>
+        <Link href="/management">
+          <Button variant="outline" className="w-full justify-start">
+            <Settings className="w-4 h-4 mr-2" />
+            Configurações
+          </Button>
+        </Link>
+        <div className="pt-2 border-t">
+          <div className="text-xs text-gray-500 mb-2 flex items-center">
+            <Clock className="w-3 h-3 mr-1" />
+            Próximos Prazos
+          </div>
+          <div className="text-sm text-gray-600">
+            Verifique os prazos das fases em andamento
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState(getTodayString());
@@ -25,7 +128,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center space-x-4">
             <CalendarCheck className="text-blue-600 text-2xl w-8 h-8" />
-            <h1 className="text-xl font-semibold text-gray-900">Sistema de Agendamento</h1>
+            <h1 className="text-xl font-semibold text-gray-900">TimeFlow - Gestão de Projetos BI</h1>
           </div>
           <div className="flex items-center space-x-4">
             <Link href="/management">
@@ -142,25 +245,11 @@ export default function Dashboard() {
             <div className="space-y-6">
               {/* Quick Create would go here if needed */}
               
-              {/* Recent Activity */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Atividade Recente</h3>
-                <div className="space-y-3">
-                  <div className="text-center py-4 text-gray-500 text-sm">
-                    Atividades aparecerão aqui conforme você usar o sistema
-                  </div>
-                </div>
-              </div>
+              {/* Project Status Overview */}
+              <ProjectStatusCard />
 
-              {/* Weekly Overview */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Visão Semanal</h3>
-                <div className="space-y-3">
-                  <div className="text-center py-4 text-gray-500 text-sm">
-                    Visão semanal será calculada automaticamente
-                  </div>
-                </div>
-              </div>
+              {/* Quick Actions */}
+              <QuickActionsCard />
             </div>
           </div>
         </main>

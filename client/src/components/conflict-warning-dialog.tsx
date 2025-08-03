@@ -258,7 +258,7 @@ export default function ConflictWarningDialog({
               <Checkbox
                 id="acknowledge-overlap"
                 checked={acknowledgeOverlap}
-                onCheckedChange={setAcknowledgeOverlap}
+                onCheckedChange={(checked) => setAcknowledgeOverlap(checked === true)}
                 className="mt-1 data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600"
               />
               <label

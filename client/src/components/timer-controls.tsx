@@ -35,7 +35,7 @@ export default function TimerControls({
     queryKey: [`/api/appointments/${appointmentId}/timer/status`],
     refetchInterval: 5000,
     staleTime: 0, // Always refetch to get fresh data
-    cacheTime: 0, // Don't cache the results
+    gcTime: 0, // Don't cache the results
   });
 
   console.log(`Timer ${appointmentId} - Status:`, timerStatus);
@@ -125,7 +125,7 @@ export default function TimerControls({
     );
   }
 
-  const { timerState, estimatedMinutes, actualTimeMinutes, status } = timerStatus;
+  const { timerState, estimatedMinutes, actualTimeMinutes, status } = (timerStatus as any) || {};
   const isCompleted = status === 'completed';
 
   return (

@@ -9,48 +9,78 @@ import ProjectsManagement from "@/components/projects-management";
 import UsersManagement from "@/components/users-management";
 import PhasesManagement from "@/components/phases-management";
 import SubphasesManagement from "@/components/subphases-management";
-import { Building2, FolderOpen, Users, Settings, ArrowLeft, Home, Layers, Layers3 } from "lucide-react";
+import ProjectKPIsDashboard from "@/components/project-kpis-dashboard";
+import { Building2, FolderOpen, Users, Settings, ArrowLeft, Home, Layers, Layers3, BarChart3 } from "lucide-react";
 
 export default function ManagementPage() {
-  const [activeTab, setActiveTab] = useState("companies");
+  const [activeTab, setActiveTab] = useState("kpis");
   const [, setLocation] = useLocation();
 
-  // Fetch data for metrics
-  const { data: companies = [] } = useQuery<any[]>({
+  // Test simple data loading
+  const { data: companies = [], isLoading: companiesLoading, error: companiesError } = useQuery<any[]>({
     queryKey: ['/api/companies'],
-  });
-
-  const { data: projects = [] } = useQuery<any[]>({
-    queryKey: ['/api/projects'],
-  });
-
-  const { data: users = [] } = useQuery<any[]>({
-    queryKey: ['/api/users'],
-  });
-
-  const { data: phases = [] } = useQuery<any[]>({
-    queryKey: ['/api/phases'],
-  });
-
-  // Count total subphases across all phases
-  const { data: subphasesCount = 0 } = useQuery<number>({
-    queryKey: ['/api/subphases-count'],
     queryFn: async () => {
-      // Get all phases and count their subphases
-      let totalCount = 0;
-      for (const phase of phases) {
-        try {
-          const response = await fetch(`/api/phases/${phase.id}/subphases`);
-          const subphases = await response.json();
-          totalCount += subphases.length;
-        } catch (error) {
-          console.error(`Error fetching subphases for phase ${phase.id}:`, error);
-        }
-      }
-      return totalCount;
-    },
-    enabled: phases.length > 0,
+      const response = await fetch('/api/companies');
+      if (!response.ok) throw new Error('Failed to fetch companies');
+      return response.json();
+    }
   });
+
+  const { data: projects = [], isLoading: projectsLoading, error: projectsError } = useQuery<any[]>({
+    queryKey: ['/api/projects'],
+    queryFn: async () => {
+      const response = await fetch('/api/projects');
+      if (!response.ok) throw new Error('Failed to fetch projects');
+      return response.json();
+    }
+  });
+
+  const { data: users = [], isLoading: usersLoading, error: usersError } = useQuery<any[]>({
+    queryKey: ['/api/users'],
+    queryFn: async () => {
+      const response = await fetch('/api/users');
+      if (!response.ok) throw new Error('Failed to fetch users');
+      return response.json();
+    }
+  });
+
+  const { data: phases = [], isLoading: phasesLoading, error: phasesError } = useQuery<any[]>({
+    queryKey: ['/api/phases'],
+    queryFn: async () => {
+      const response = await fetch('/api/phases');
+      if (!response.ok) throw new Error('Failed to fetch phases');
+      return response.json();
+    }
+  });
+
+  // Show loading state
+  if (companiesLoading || projectsLoading || usersLoading || phasesLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando dados...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (companiesError || projectsError || usersError || phasesError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Erro ao carregar dados</h1>
+          <p className="text-gray-600 mb-4">
+            {companiesError?.message || projectsError?.message || usersError?.message || phasesError?.message}
+          </p>
+          <Button onClick={() => window.location.reload()}>Tentar novamente</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const subphasesCount = 0; // Simplified for now
 
   const handleGoHome = () => {
     setLocation("/");
@@ -157,7 +187,11 @@ export default function ManagementPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:grid-cols-6">
+            <TabsTrigger value="kpis" className="flex items-center space-x-2">
+              <BarChart3 className="w-4 h-4" />
+              <span>KPIs</span>
+            </TabsTrigger>
             <TabsTrigger value="companies" className="flex items-center space-x-2">
               <Building2 className="w-4 h-4" />
               <span>Empresas</span>
@@ -179,6 +213,10 @@ export default function ManagementPage() {
               <span>Subfases</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="kpis" className="space-y-6">
+            <ProjectKPIsDashboard />
+          </TabsContent>
 
           <TabsContent value="companies" className="space-y-6">
             <Card>

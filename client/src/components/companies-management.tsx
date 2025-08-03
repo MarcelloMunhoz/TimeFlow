@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CardDescriptionText } from "@/components/ui/formatted-text";
 import { useToast } from "@/hooks/use-toast";
 import { CustomModal } from "@/components/ui/custom-modal";
 import { Building2, Plus, Edit, Trash2, Mail, Phone, Globe, FolderOpen, ChevronDown, ChevronUp } from "lucide-react";
@@ -242,7 +243,7 @@ export default function CompaniesManagement() {
     setFormData({
       name: company.name,
       description: company.description || "",
-      type: company.type as "internal" | "client",
+      type: "client" as const,
       email: company.email || "",
       phone: company.phone || "",
       website: company.website || "",
@@ -319,9 +320,12 @@ export default function CompaniesManagement() {
             <Label htmlFor="company-description">Descrição</Label>
             <Textarea
               id="company-description"
-              placeholder="Descrição da empresa"
+              placeholder="Descreva a empresa, seus serviços, área de atuação e outras informações relevantes..."
               value={formData.description}
               onChange={(e) => handleInputChange("description", e.target.value)}
+              maxLength={1500}
+
+              rows={3}
             />
           </div>
 
@@ -383,7 +387,7 @@ export default function CompaniesManagement() {
       </CustomModal>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {companies.map((company: Company) => {
+        {(companies as Company[]).map((company: Company) => {
           const companyProjects = getCompanyProjects(company.id);
           const isExpanded = expandedCompanies.has(company.id);
 
@@ -400,7 +404,9 @@ export default function CompaniesManagement() {
                   </Badge>
                 </div>
                 {company.description && (
-                  <CardDescription>{company.description}</CardDescription>
+                  <CardDescriptionText maxLines={2}>
+                    {company.description}
+                  </CardDescriptionText>
                 )}
 
                 {/* Projects Summary */}
@@ -519,7 +525,7 @@ export default function CompaniesManagement() {
         })}
       </div>
 
-      {companies.length === 0 && (
+      {(companies as Company[]).length === 0 && (
         <div className="text-center py-12">
           <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma empresa cadastrada</h3>

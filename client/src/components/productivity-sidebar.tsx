@@ -52,10 +52,10 @@ export default function ProductivitySidebar({ onFilterChange }: ProductivitySide
   };
 
   // Get unique projects and companies
-  const projectSet = new Set(appointments.filter((apt: any) => apt.project).map((apt: any) => apt.project));
-  const companySet = new Set(appointments.filter((apt: any) => apt.company).map((apt: any) => apt.company));
-  const uniqueProjects = Array.from(projectSet);
-  const uniqueCompanies = Array.from(companySet);
+  const projectSet = new Set(appointments.filter((apt: any) => apt.project && apt.project.trim() !== "").map((apt: any) => apt.project));
+  const companySet = new Set(appointments.filter((apt: any) => apt.company && apt.company.trim() !== "").map((apt: any) => apt.company));
+  const uniqueProjects = Array.from(projectSet).filter(Boolean);
+  const uniqueCompanies = Array.from(companySet).filter(Boolean);
 
   return (
     <aside className="w-80 bg-white shadow-sm border-r border-gray-200 h-screen sticky top-16 overflow-y-auto">
@@ -141,7 +141,7 @@ export default function ProductivitySidebar({ onFilterChange }: ProductivitySide
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os Projetos</SelectItem>
-                  {uniqueProjects.map((project) => (
+                  {uniqueProjects.filter(project => project && project.trim() !== "").map((project) => (
                     <SelectItem key={project} value={project}>{project}</SelectItem>
                   ))}
                 </SelectContent>
@@ -156,7 +156,7 @@ export default function ProductivitySidebar({ onFilterChange }: ProductivitySide
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as Empresas</SelectItem>
-                  {uniqueCompanies.map((company) => (
+                  {uniqueCompanies.filter(company => company && company.trim() !== "").map((company) => (
                     <SelectItem key={company} value={company}>{company}</SelectItem>
                   ))}
                 </SelectContent>

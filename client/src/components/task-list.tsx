@@ -104,7 +104,7 @@ export default function TaskList({
   const getCompanyName = (appointment: any) => {
     console.log('getCompanyName - appointment:', appointment.id, 'companyId:', appointment.companyId, 'company:', appointment.company);
     if (appointment.companyId) {
-      const company = companies.find((c: any) => c.id === appointment.companyId);
+      const company = (companies as any[]).find((c: any) => c.id === appointment.companyId);
       console.log('Found company:', company);
       return company?.name;
     }
@@ -114,7 +114,7 @@ export default function TaskList({
   const getProjectName = (appointment: any) => {
     console.log('getProjectName - appointment:', appointment.id, 'projectId:', appointment.projectId, 'project:', appointment.project);
     if (appointment.projectId) {
-      const project = projects.find((p: any) => p.id === appointment.projectId);
+      const project = (projects as any[]).find((p: any) => p.id === appointment.projectId);
       console.log('Found project:', project);
       return project?.name;
     }
@@ -124,7 +124,7 @@ export default function TaskList({
   const getAssignedUserName = (appointment: any) => {
     console.log('getAssignedUserName - appointment:', appointment.id, 'assignedUserId:', appointment.assignedUserId);
     if (appointment.assignedUserId) {
-      const user = users.find((u: any) => u.id === appointment.assignedUserId);
+      const user = (users as any[]).find((u: any) => u.id === appointment.assignedUserId);
       console.log('Found user:', user);
       return user?.name;
     }
@@ -140,7 +140,7 @@ export default function TaskList({
     setStatusFilter,
     setTimeFilter
   } = useAppointmentFilters({
-    appointments: allAppointments,
+    appointments: allAppointments as any[],
     selectedDate
   });
 
@@ -151,7 +151,7 @@ export default function TaskList({
   const handleTimeFilterChange = externalOnTimeFilterChange || setTimeFilter;
 
   // Detect overlapping appointments
-  const { appointmentsWithOverlaps, getOverlappingAppointments } = useAppointmentOverlaps(allAppointments);
+  const { appointmentsWithOverlaps, getOverlappingAppointments } = useAppointmentOverlaps(allAppointments as any[]);
 
   // Apply legacy filters to the already filtered appointments
   const appointments = filteredAppointments.filter((appointment: any) => {
@@ -363,7 +363,7 @@ export default function TaskList({
                           </p>
                           {appointment.isRecurring && (
                             <div className="flex items-center gap-1">
-                              <Repeat className="w-3 h-3 text-blue-500" title="Tarefa recorrente" />
+                              <Repeat className="w-3 h-3 text-blue-500" />
                               <span className="text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">
                                 {appointment.recurrencePattern === 'daily' && 'Diário'}
                                 {appointment.recurrencePattern === 'weekly' && 'Semanal'}
@@ -374,7 +374,7 @@ export default function TaskList({
                           )}
                           {appointment.recurringTaskId && !appointment.isRecurringTemplate && (
                             <div className="flex items-center gap-1">
-                              <Link className="w-3 h-3 text-green-500" title="Instância de tarefa recorrente" />
+                              <Link className="w-3 h-3 text-green-500" />
                               <span className="text-xs text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
                                 Instância
                               </span>

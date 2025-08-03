@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { CardDescriptionText } from "@/components/ui/formatted-text";
 import { useToast } from "@/hooks/use-toast";
 import { CustomModal } from "@/components/ui/custom-modal";
 import ProjectPhasesManagement from "@/components/project-phases-management";
@@ -159,9 +160,9 @@ export default function ProjectsManagement() {
     };
 
     if (editingProject) {
-      updateProjectMutation.mutate({ id: editingProject.id, data: submitData });
+      updateProjectMutation.mutate({ id: editingProject.id, data: { ...submitData, description: submitData.description || "" } });
     } else {
-      createProjectMutation.mutate(submitData);
+      createProjectMutation.mutate({ ...submitData, description: submitData.description || "" });
     }
   };
 
@@ -291,7 +292,7 @@ export default function ProjectsManagement() {
   // Functions are defined above in the correct order
 
   const getCompanyName = (companyId: number) => {
-    const company = companies.find((c: Company) => c.id === companyId);
+    const company = (companies as Company[]).find((c: Company) => c.id === companyId);
     return company?.name || "Empresa não encontrada";
   };
 
@@ -377,7 +378,7 @@ export default function ProjectsManagement() {
               className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.companyId ? "border-red-500" : ""}`}
             >
               <option value={0}>Selecione a empresa</option>
-              {companies.map((company: Company) => (
+              {(companies as Company[]).map((company: Company) => (
                 <option key={company.id} value={company.id}>
                   {company.name} ({company.type === "internal" ? "Interna" : "Cliente"})
                 </option>
@@ -422,9 +423,12 @@ export default function ProjectsManagement() {
             <Label htmlFor="project-description">Descrição</Label>
             <Textarea
               id="project-description"
-              placeholder="Descrição do projeto"
+              placeholder="Descreva o projeto, seus objetivos e detalhes importantes..."
               value={formData.description}
               onChange={(e) => handleInputChange("description", e.target.value)}
+              maxLength={2000}
+
+              rows={4}
             />
           </div>
 
@@ -497,7 +501,7 @@ export default function ProjectsManagement() {
       </CustomModal>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {projects.map((project: Project) => (
+        {(projects as Project[]).map((project: Project) => (
           <Card key={project.id} className="hover:shadow-md transition-shadow">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
@@ -518,7 +522,9 @@ export default function ProjectsManagement() {
                 </div>
               </div>
               {project.description && (
-                <CardDescription>{project.description}</CardDescription>
+                <CardDescriptionText maxLines={3}>
+                  {project.description}
+                </CardDescriptionText>
               )}
             </CardHeader>
             <CardContent className="space-y-3">
@@ -583,7 +589,7 @@ export default function ProjectsManagement() {
         ))}
       </div>
 
-      {projects.length === 0 && (
+      {(projects as Project[]).length === 0 && (
         <div className="text-center py-12">
           <FolderOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum projeto cadastrado</h3>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DescriptionText } from "@/components/ui/formatted-text";
 import { Trash2, Edit, Plus, Save, X, Layers3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -226,11 +227,11 @@ export default function SubphasesManagement() {
               <SelectValue placeholder="Selecione uma fase" />
             </SelectTrigger>
             <SelectContent>
-              {phases.map((phase) => (
+              {phases.filter((phase) => phase.id && phase.id.toString().trim() !== "").map((phase) => (
                 <SelectItem key={phase.id} value={phase.id.toString()}>
                   <div className="flex items-center space-x-2">
-                    <div 
-                      className="w-3 h-3 rounded-full" 
+                    <div
+                      className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: phase.color }}
                     />
                     <span>{phase.name}</span>
@@ -259,7 +260,7 @@ export default function SubphasesManagement() {
                 setFormData({ ...formData, phaseId: parseInt(selectedPhaseId) });
                 setShowCreateForm(true);
               }}
-              disabled={showCreateForm || editingSubphase}
+              disabled={!!(showCreateForm || editingSubphase)}
             >
               <Plus className="w-4 h-4 mr-2" />
               Nova Subfase
@@ -302,7 +303,9 @@ export default function SubphasesManagement() {
                   <Textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Descreva o propósito desta subfase..."
+                    placeholder="Descreva o propósito desta subfase, atividades específicas e entregáveis esperados..."
+                    maxLength={1500}
+
                     rows={3}
                   />
                 </div>
@@ -400,9 +403,11 @@ export default function SubphasesManagement() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-gray-600 mb-2">
-                      {subphase.description || "Sem descrição"}
-                    </p>
+                    <div className="mb-3">
+                      <DescriptionText>
+                        {subphase.description || "Sem descrição"}
+                      </DescriptionText>
+                    </div>
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <span>{subphase.estimatedDurationDays || 1} dia(s)</span>
                       <span>{subphase.isRequired ? "Obrigatória" : "Opcional"}</span>

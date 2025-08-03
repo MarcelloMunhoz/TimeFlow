@@ -215,9 +215,9 @@ export class WorkScheduleService {
       startTime: rule.startTime,
       endTime: rule.endTime,
       ruleType: rule.ruleType,
-      isWorkingTime: rule.isWorkingTime,
-      allowOverlap: rule.allowOverlap,
-      description: rule.description
+      isWorkingTime: rule.isWorkingTime || false,
+      allowOverlap: rule.allowOverlap || false,
+      description: rule.description || ''
     }));
   }
 

@@ -30,11 +30,35 @@ interface ProjectPhasesManagementProps {
   projectName: string;
 }
 
+// Helper function to format date for display without timezone issues
+const formatDateForDisplay = (dateString: string | null | undefined): string => {
+  if (!dateString || typeof dateString !== 'string') return '';
+
+  try {
+    // Parse the date as local date (avoid timezone conversion)
+    const [year, month, day] = dateString.split('-');
+
+    if (!year || !month || !day) return '';
+
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) return '';
+
+    return date.toLocaleDateString('pt-BR');
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return '';
+  }
+};
+
 export default function ProjectPhasesManagement({ projectId, projectName }: ProjectPhasesManagementProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
   const [deadline, setDeadline] = useState<string>("");
   const [editingPhase, setEditingPhase] = useState<ProjectPhase | null>(null);
+
+
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -59,7 +83,7 @@ export default function ProjectPhasesManagement({ projectId, projectName }: Proj
 
   // Add phase to project mutation
   const addPhaseMutation = useMutation({
-    mutationFn: async (data: { phaseId: number; deadline?: string }) => {
+    mutationFn: async (data: { phaseId: number; endDate?: string }) => {
       const response = await apiRequest("POST", `/api/projects/${projectId}/phases`, data);
       return response.json();
     },
@@ -81,7 +105,7 @@ export default function ProjectPhasesManagement({ projectId, projectName }: Proj
 
   // Update project phase mutation
   const updatePhaseMutation = useMutation({
-    mutationFn: async ({ phaseId, data }: { phaseId: number; data: { deadline?: string } }) => {
+    mutationFn: async ({ phaseId, data }: { phaseId: number; data: { endDate?: string } }) => {
       const response = await apiRequest("PATCH", `/api/projects/${projectId}/phases/${phaseId}`, data);
       return response.json();
     },
@@ -132,13 +156,15 @@ export default function ProjectPhasesManagement({ projectId, projectName }: Proj
     
     addPhaseMutation.mutate({
       phaseId: parseInt(selectedPhaseId),
-      deadline: deadline || undefined
+      endDate: deadline || undefined
     });
   };
 
   const handleEditDeadline = (projectPhase: ProjectPhase) => {
+    console.log("🔧 handleEditDeadline called with:", projectPhase);
     setEditingPhase(projectPhase);
     setDeadline(projectPhase.deadline || "");
+    console.log("✅ editingPhase set, deadline set to:", projectPhase.deadline || "");
   };
 
   const handleUpdateDeadline = () => {
@@ -146,7 +172,7 @@ export default function ProjectPhasesManagement({ projectId, projectName }: Proj
 
     updatePhaseMutation.mutate({
       phaseId: editingPhase.phaseId,
-      data: { deadline: deadline || undefined }
+      data: { endDate: deadline || undefined }
     });
   };
 
@@ -176,7 +202,7 @@ export default function ProjectPhasesManagement({ projectId, projectName }: Proj
         </div>
         <Button 
           onClick={() => setShowAddForm(true)}
-          disabled={showAddForm || editingPhase || availablePhases.length === 0}
+          disabled={!!(showAddForm || editingPhase || availablePhases.length === 0)}
           size="sm"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -201,11 +227,11 @@ export default function ProjectPhasesManagement({ projectId, projectName }: Proj
                   <SelectValue placeholder="Selecione uma fase" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availablePhases.map((phase) => (
+                  {availablePhases.filter((phase) => phase.id && phase.id.toString().trim() !== "").map((phase) => (
                     <SelectItem key={phase.id} value={phase.id.toString()}>
                       <div className="flex items-center space-x-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
+                        <div
+                          className="w-3 h-3 rounded-full"
                           style={{ backgroundColor: phase.color }}
                         />
                         <span>{phase.name}</span>
@@ -279,12 +305,15 @@ export default function ProjectPhasesManagement({ projectId, projectName }: Proj
 
       {/* Project Phases List */}
       <div className="space-y-3">
-        {projectPhases.map((projectPhase) => (
+        {projectPhases.map((projectPhase, index) => (
           <Card key={projectPhase.id}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <Badge 
+                  <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    #{(projectPhase.phase as any).orderIndex || index + 1}
+                  </span>
+                  <Badge
                     style={{ backgroundColor: projectPhase.phase.color, color: 'white' }}
                     className="text-xs"
                   >
@@ -293,7 +322,7 @@ export default function ProjectPhasesManagement({ projectId, projectName }: Proj
                   {projectPhase.deadline && (
                     <div className="flex items-center space-x-1 text-sm text-gray-600">
                       <Calendar className="w-4 h-4" />
-                      <span>{new Date(projectPhase.deadline).toLocaleDateString('pt-BR')}</span>
+                      <span>{formatDateForDisplay(projectPhase.deadline)}</span>
                     </div>
                   )}
                   {!projectPhase.deadline && (

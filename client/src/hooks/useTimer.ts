@@ -24,7 +24,7 @@ export function useTimer(appointmentId: number) {
     queryKey: [`/api/appointments/${appointmentId}/timer/status`],
     refetchInterval: (data) => {
       // Refetch every second if timer is running
-      return data?.timerState === 'running' ? 1000 : false;
+      return (data as any)?.timerState === 'running' ? 1000 : false;
     },
   });
 
@@ -46,9 +46,7 @@ export function useTimer(appointmentId: number) {
 
   // Start timer mutation
   const startTimerMutation = useMutation({
-    mutationFn: () => apiRequest(`/api/appointments/${appointmentId}/timer/start`, {
-      method: 'POST',
-    }),
+    mutationFn: () => apiRequest(`/api/appointments/${appointmentId}/timer/start`, 'POST'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/appointments/${appointmentId}/timer/status`] });
       queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
@@ -68,9 +66,7 @@ export function useTimer(appointmentId: number) {
 
   // Pause timer mutation
   const pauseTimerMutation = useMutation({
-    mutationFn: () => apiRequest(`/api/appointments/${appointmentId}/timer/pause`, {
-      method: 'POST',
-    }),
+    mutationFn: () => apiRequest(`/api/appointments/${appointmentId}/timer/pause`, 'POST'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/appointments/${appointmentId}/timer/status`] });
       queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
@@ -90,9 +86,7 @@ export function useTimer(appointmentId: number) {
 
   // Resume timer mutation
   const resumeTimerMutation = useMutation({
-    mutationFn: () => apiRequest(`/api/appointments/${appointmentId}/timer/resume`, {
-      method: 'POST',
-    }),
+    mutationFn: () => apiRequest(`/api/appointments/${appointmentId}/timer/resume`, 'POST'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/appointments/${appointmentId}/timer/status`] });
       queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
@@ -112,9 +106,7 @@ export function useTimer(appointmentId: number) {
 
   // Complete appointment mutation
   const completeTimerMutation = useMutation({
-    mutationFn: () => apiRequest(`/api/appointments/${appointmentId}/timer/complete`, {
-      method: 'POST',
-    }),
+    mutationFn: () => apiRequest(`/api/appointments/${appointmentId}/timer/complete`, 'POST'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/appointments/${appointmentId}/timer/status`] });
       queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });

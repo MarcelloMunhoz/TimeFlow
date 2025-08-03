@@ -215,7 +215,7 @@ export default function UsersManagement() {
   };
 
   const getCompanyName = (companyId: number) => {
-    const company = companies.find((c: Company) => c.id === companyId);
+    const company = (companies as Company[]).find((c: Company) => c.id === companyId);
     return company?.name || "Empresa não encontrada";
   };
 
@@ -228,7 +228,7 @@ export default function UsersManagement() {
       .slice(0, 2);
   };
 
-  const filteredUsers = users.filter((user: User) => {
+  const filteredUsers = (users as User[]).filter((user: User) => {
     if (filterType === "all") return true;
     return user.type === filterType;
   });
@@ -297,7 +297,7 @@ export default function UsersManagement() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {companies.map((company: Company) => (
+                            {(companies as Company[]).filter((company: Company) => company.id && company.id.toString().trim() !== "").map((company: Company) => (
                               <SelectItem key={company.id} value={company.id.toString()}>
                                 {company.name} ({company.type === "internal" ? "Interna" : "Cliente"})
                               </SelectItem>

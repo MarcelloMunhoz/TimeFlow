@@ -39,7 +39,7 @@ export function useTimeSlotAvailability({
 
   // Filter appointments for the selected date (excluding the one being edited)
   const dayAppointments = useMemo(() => {
-    return appointments.filter((apt: any) => 
+    return (appointments as any[]).filter((apt: any) =>
       apt.date === selectedDate && 
       apt.id !== excludeAppointmentId &&
       apt.status !== 'cancelled' // Don't consider cancelled appointments

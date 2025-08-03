@@ -122,11 +122,11 @@ if (typeof window !== 'undefined') {
 
   // Patch DOM methods at the prototype level to prevent errors at source
   const originalRemoveChild = Node.prototype.removeChild;
-  Node.prototype.removeChild = function(child: Node) {
+  Node.prototype.removeChild = function<T extends Node>(child: T): T {
     try {
       // Check if child is actually a child of this node
       if (this.contains && this.contains(child)) {
-        return originalRemoveChild.call(this, child);
+        return originalRemoveChild.call(this, child) as T;
       } else {
         // Silently ignore if not a child
         return child;
@@ -139,9 +139,9 @@ if (typeof window !== 'undefined') {
 
   // Patch appendChild to be more defensive
   const originalAppendChild = Node.prototype.appendChild;
-  Node.prototype.appendChild = function(child: Node) {
+  Node.prototype.appendChild = function<T extends Node>(child: T): T {
     try {
-      return originalAppendChild.call(this, child);
+      return originalAppendChild.call(this, child) as T;
     } catch (error) {
       // Silently ignore errors and return the child
       return child;
@@ -150,9 +150,9 @@ if (typeof window !== 'undefined') {
 
   // Patch insertBefore to be more defensive
   const originalInsertBefore = Node.prototype.insertBefore;
-  Node.prototype.insertBefore = function(newNode: Node, referenceNode: Node | null) {
+  Node.prototype.insertBefore = function<T extends Node>(newNode: T, referenceNode: Node | null): T {
     try {
-      return originalInsertBefore.call(this, newNode, referenceNode);
+      return originalInsertBefore.call(this, newNode, referenceNode) as T;
     } catch (error) {
       // Silently ignore errors and return the new node
       return newNode;

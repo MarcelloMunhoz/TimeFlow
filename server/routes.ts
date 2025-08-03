@@ -125,6 +125,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get project management KPIs
+  app.get("/api/projects/kpis", async (req, res) => {
+    try {
+      console.log("📊 KPIs endpoint called with query:", req.query);
+      const { startDate, endDate, companyId, status } = req.query;
+
+      const filters: any = {};
+      if (startDate) filters.startDate = startDate as string;
+      if (endDate) filters.endDate = endDate as string;
+      if (companyId) filters.companyId = parseInt(companyId as string);
+      if (status) filters.status = status as string;
+
+      console.log("📊 Calling calculateProjectKPIs with filters:", filters);
+      const kpis = await storage.calculateProjectKPIs(filters);
+      console.log("📊 KPIs calculated successfully:", kpis);
+      res.json(kpis);
+    } catch (error) {
+      console.error("💥 Error calculating project KPIs:", error);
+      res.status(500).json({ message: "Failed to calculate project KPIs" });
+    }
+  });
+
   // Get single project
   app.get("/api/projects/:id", async (req, res) => {
     try {
@@ -312,6 +334,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to update project" });
     }
   });
+
+  // Get project progress
+  app.get("/api/projects/:id/progress", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const progressPercentage = await storage.calculateProjectProgress(parseInt(id));
+      res.json({ projectId: parseInt(id), progressPercentage });
+    } catch (error) {
+      console.error(`Error calculating project ${req.params.id} progress:`, error);
+      res.status(500).json({ message: "Failed to calculate project progress" });
+    }
+  });
+
+  // Update project progress manually
+  app.patch("/api/projects/:id/progress", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.updateProjectProgress(parseInt(id));
+      const progressPercentage = await storage.calculateProjectProgress(parseInt(id));
+      res.json({ projectId: parseInt(id), progressPercentage, message: "Progress updated successfully" });
+    } catch (error) {
+      console.error(`Error updating project ${req.params.id} progress:`, error);
+      res.status(500).json({ message: "Failed to update project progress" });
+    }
+  });
+
+  // Get project deadline status and performance indicators
+  app.get("/api/projects/:id/deadline-status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deadlineStatus = await storage.calculateProjectDeadlineStatus(parseInt(id));
+      res.json(deadlineStatus);
+    } catch (error) {
+      console.error(`Error calculating project ${req.params.id} deadline status:`, error);
+      res.status(500).json({ message: "Failed to calculate project deadline status" });
+    }
+  });
+
+
 
   // Delete project
   app.delete("/api/projects/:id", async (req, res) => {
@@ -508,6 +569,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Reorder phases (MUST be before the /:id route)
+  app.patch("/api/phases/reorder", async (req, res) => {
+    try {
+      console.log("🔄 Received phase reorder request");
+      console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
+
+      const { phaseOrders } = req.body;
+
+      // Validate the request body
+      if (!Array.isArray(phaseOrders)) {
+        console.log("❌ phaseOrders is not an array:", typeof phaseOrders);
+        return res.status(400).json({ message: "phaseOrders must be an array" });
+      }
+
+      console.log("✅ phaseOrders is valid array with", phaseOrders.length, "items");
+
+      // Validate each phase order object
+      for (const order of phaseOrders) {
+        if (typeof order.id !== 'number' || typeof order.orderIndex !== 'number') {
+          console.log("❌ Invalid phase order object:", order);
+          return res.status(400).json({ message: "Each phase order must have id and orderIndex as numbers" });
+        }
+      }
+
+      console.log("✅ All phase order objects are valid");
+
+      await storage.reorderPhases(phaseOrders);
+      console.log("✅ Phases reordered successfully");
+      res.json({ message: "Phases reordered successfully" });
+    } catch (error) {
+      console.error("💥 Error reordering phases:", error);
+      console.error("💥 Error stack:", (error as Error).stack);
+      res.status(500).json({
+        message: "Failed to reorder phases",
+        error: (error as Error).message,
+        details: (error as Error).stack
+      });
+    }
+  });
+
   // Update phase
   app.patch("/api/phases/:id", async (req, res) => {
     try {
@@ -607,7 +708,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/projects/:projectId/phases/:phaseId", async (req, res) => {
     try {
       const { projectId, phaseId } = req.params;
-      const validatedData = updateProjectPhaseSchema.parse(req.body);
+
+
+      // Check if body is empty
+      if (!req.body || Object.keys(req.body).length === 0) {
+        return res.status(400).json({ message: "Request body cannot be empty" });
+      }
+
+      // Handle backward compatibility: convert 'deadline' to 'endDate'
+      let requestBody = { ...req.body };
+      if (requestBody.deadline && !requestBody.endDate) {
+        requestBody.endDate = requestBody.deadline;
+        delete requestBody.deadline;
+
+      }
+
+      const validatedData = updateProjectPhaseSchema.parse(requestBody);
+
       const projectPhase = await storage.updateProjectPhase(parseInt(projectId), parseInt(phaseId), validatedData);
       if (!projectPhase) {
         return res.status(404).json({ message: "Project phase not found" });
@@ -615,6 +732,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(projectPhase);
     } catch (error) {
       if (error instanceof z.ZodError) {
+
         return res.status(400).json({ message: "Invalid project phase data", errors: error.errors });
       }
       console.error("Error updating project phase:", error);
@@ -798,7 +916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Sync project timeline if dates were updated
       if (validatedData.startDate || validatedData.endDate) {
-        const projectPhase = await db.execute(`SELECT project_id FROM project_phases WHERE id = ?` as any, [projectSubphase.project_phase_id]);
+        const projectPhase = await db.execute(sql`SELECT project_id FROM project_phases WHERE id = ${projectSubphase.project_phase_id}`);
         const projectId = (projectPhase as any).rows[0]?.project_id;
         if (projectId) {
           await storage.syncProjectTimeline(projectId);
@@ -1275,21 +1393,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Get roadmap
-        biStatus.roadmap = await storage.getProjectRoadmap(parseInt(projectId));
+        const roadmapData = await storage.getProjectRoadmap(parseInt(projectId));
+        (biStatus as any).roadmap = roadmapData;
 
         // Calculate progress
         const roadmapItems = biStatus.roadmap;
-        const stageItems = roadmapItems.filter(item => item.stage_id && !item.main_task_id);
-        const taskItems = roadmapItems.filter(item => item.main_task_id);
+        const stageItems = roadmapItems.filter((item: any) => item.stage_id && !item.main_task_id);
+        const taskItems = roadmapItems.filter((item: any) => item.main_task_id);
 
         biStatus.progress.totalStages = stageItems.length;
-        biStatus.progress.completedStages = stageItems.filter(item => item.status === 'completed').length;
+        biStatus.progress.completedStages = stageItems.filter((item: any) => item.status === 'completed').length;
         biStatus.progress.totalTasks = taskItems.length;
-        biStatus.progress.completedTasks = taskItems.filter(item => item.status === 'completed').length;
+        biStatus.progress.completedTasks = taskItems.filter((item: any) => item.status === 'completed').length;
 
         // Calculate overall percentage if not set
         if (!biStatus.progress.overallPercentage && roadmapItems.length > 0) {
-          const completedItems = roadmapItems.filter(item => item.status === 'completed').length;
+          const completedItems = roadmapItems.filter((item: any) => item.status === 'completed').length;
           biStatus.progress.overallPercentage = Math.round((completedItems / roadmapItems.length) * 100);
         }
       }
@@ -1460,11 +1579,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`📊 Task manually completed - updating project progress for project ${appointment.projectId}`);
 
           // Use estimated time (durationMinutes) if no actual time was recorded
-          const timeToAdd = appointment.actualTimeMinutes > 0
+          const timeToAdd = (appointment.actualTimeMinutes || 0) > 0
             ? appointment.actualTimeMinutes
             : appointment.durationMinutes;
 
-          console.log(`⏱️ Adding ${timeToAdd} minutes to project progress (${appointment.actualTimeMinutes > 0 ? 'actual' : 'estimated'} time)`);
+          console.log(`⏱️ Adding ${timeToAdd} minutes to project progress (${(appointment.actualTimeMinutes || 0) > 0 ? 'actual' : 'estimated'} time)`);
 
           // Get all appointments for this project
           const projectAppointments = await db
@@ -1476,11 +1595,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const totalMinutes = projectAppointments.reduce((total, apt) => {
             if (apt.id === parseInt(id)) {
               // Use the time we calculated above for the current appointment
-              return total + timeToAdd;
+              return total + (timeToAdd || 0);
             }
             // For other appointments, use actual time if available, otherwise use estimated time for completed tasks
             if (apt.status === 'completed') {
-              return total + (apt.actualTimeMinutes > 0 ? apt.actualTimeMinutes : apt.durationMinutes);
+              return total + ((apt.actualTimeMinutes || 0) > 0 ? (apt.actualTimeMinutes || 0) : apt.durationMinutes);
             }
             return total;
           }, 0);
@@ -1795,9 +1914,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Found ${appointmentsWithPhases.length} appointments with phases`);
 
       // Extract unique phase IDs
-      const phaseIdsInProjects = [...new Set(projectPhases.map(pp => pp.phaseId))];
-      const phaseIdsInAppointments = [...new Set(appointmentsWithPhases.map(a => a.phaseId).filter(id => id !== null))];
-      const allPhaseIdsInUse = [...new Set([...phaseIdsInProjects, ...phaseIdsInAppointments])];
+      const phaseIdsInProjects = Array.from(new Set(projectPhases.map(pp => pp.phaseId)));
+      const phaseIdsInAppointments = Array.from(new Set(appointmentsWithPhases.map(a => a.phaseId).filter(id => id !== null)));
+      const allPhaseIdsInUse = Array.from(new Set([...phaseIdsInProjects, ...phaseIdsInAppointments]));
 
       res.json({
         success: true,
@@ -1816,7 +1935,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Error in debug phases-in-use:", error);
-      res.status(500).json({ message: "Debug endpoint failed", error: error.message });
+      res.status(500).json({ message: "Debug endpoint failed", error: (error as Error).message });
     }
   });
 
@@ -1993,7 +2112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update project progress for affected projects
       const projectProgressUpdates = [];
-      for (const [projectId, completedPomodoros] of projectUpdates) {
+      for (const [projectId, completedPomodoros] of Array.from(projectUpdates)) {
         try {
           console.log(`📊 Updating progress for project ${projectId} (${completedPomodoros.length} auto-completed Pomodoros)`);
 
@@ -2007,7 +2126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const totalMinutes = projectAppointments.reduce((total, apt) => {
             if (apt.status === 'completed') {
               // Use actual time if available, otherwise use estimated time
-              return total + (apt.actualTimeMinutes > 0 ? apt.actualTimeMinutes : apt.durationMinutes);
+              return total + ((apt.actualTimeMinutes || 0) > 0 ? (apt.actualTimeMinutes || 0) : apt.durationMinutes);
             }
             return total;
           }, 0);
@@ -2080,8 +2199,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             let minutes = 0;
             if (appointment.status === 'completed') {
               // Use actual time if available, otherwise use estimated time for completed tasks
-              minutes = appointment.actualTimeMinutes > 0 ? appointment.actualTimeMinutes : appointment.durationMinutes;
-              console.log(`  - Appointment ${appointment.id} (${appointment.title}): ${minutes} minutes (${appointment.actualTimeMinutes > 0 ? 'actual' : 'estimated'})`);
+              minutes = (appointment.actualTimeMinutes || 0) > 0 ? (appointment.actualTimeMinutes || 0) : appointment.durationMinutes;
+              console.log(`  - Appointment ${appointment.id} (${appointment.title}): ${minutes} minutes (${(appointment.actualTimeMinutes || 0) > 0 ? 'actual' : 'estimated'})`);
             } else {
               console.log(`  - Appointment ${appointment.id} (${appointment.title}): 0 minutes (not completed)`);
             }
@@ -2160,6 +2279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timerState: "running",
         timerStartedAt: localTimestamp,
         timerPausedAt: null,
+        allowOverlap: false,
       });
 
       res.json({ success: true, message: "Timer started", startedAt: now });
@@ -2205,6 +2325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timerPausedAt: localTimestamp,
         accumulatedTimeMinutes: newAccumulatedTime,
         actualTimeMinutes: newAccumulatedTime,
+        allowOverlap: false,
       });
 
       // Update project progress if appointment is linked to a project
@@ -2282,6 +2403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timerState: "running",
         timerStartedAt: localTimestamp,
         timerPausedAt: null,
+        allowOverlap: false,
       });
 
       res.json({ success: true, message: "Timer resumed", resumedAt: localTimestamp });
@@ -2321,6 +2443,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accumulatedTimeMinutes: finalTimeMinutes,
         timerStartedAt: null,
         timerPausedAt: null,
+        allowOverlap: false,
       });
 
       // Update project progress if appointment is linked to a project
@@ -2417,7 +2540,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, message: "Timer fields migrated successfully" });
     } catch (error) {
       console.error("Migration error:", error);
-      res.status(500).json({ error: "Migration failed", details: error.message });
+      res.status(500).json({ error: "Migration failed", details: (error as Error).message });
     }
   });
 
@@ -2432,12 +2555,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timerPausedAt: null,
         accumulatedTimeMinutes: 0,
         actualTimeMinutes: 0,
+        allowOverlap: false,
       });
 
       res.json({ success: true, message: "Timer reset successfully" });
     } catch (error) {
       console.error("Timer reset error:", error);
-      res.status(500).json({ error: "Timer reset failed", details: error.message });
+      res.status(500).json({ error: "Timer reset failed", details: (error as Error).message });
     }
   });
 
@@ -2448,7 +2572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // First, update any null values specifically using raw SQL
       const nullUpdateResult = await db.execute(sql`UPDATE projects SET actual_hours = 0 WHERE actual_hours IS NULL`);
-      console.log(`📝 Updated ${nullUpdateResult.rowsAffected || 0} projects with null actual_hours`);
+      console.log(`📝 Updated ${(nullUpdateResult as any).rowsAffected || 0} projects with null actual_hours`);
 
       // Then reset all project actualHours to 0 to ensure consistency
       const allUpdateResult = await db.update(projects).set({ actualHours: 0 });
@@ -2458,11 +2582,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         message: "Project hours reset successfully",
-        nullUpdated: nullUpdateResult.rowsAffected || 0
+        nullUpdated: (nullUpdateResult as any).rowsAffected || 0
       });
     } catch (error) {
       console.error("Project hours migration error:", error);
-      res.status(500).json({ error: "Project hours migration failed", details: error.message });
+      res.status(500).json({ error: "Project hours migration failed", details: (error as Error).message });
     }
   });
 
