@@ -289,6 +289,7 @@ export const appointments = pgTable("appointments", {
   companyId: integer("company_id").references(() => companies.id),
   assignedUserId: integer("assigned_user_id").references(() => users.id),
   phaseId: integer("phase_id").references(() => phases.id), // optional phase assignment
+  projectSubphaseId: integer("project_subphase_id").references(() => projectSubphases.id), // link to specific project subphase
   priority: text("priority"), // keeping existing column
   category: text("category"), // keeping existing column
   tags: text("tags"), // keeping existing column

@@ -10,7 +10,8 @@ import {
   type ProjectSubphase, type InsertProjectSubphase, type UpdateProjectSubphase, projectSubphases,
   type CreateRecurringAppointment,
   type WorkSchedule, type InsertWorkSchedule, type UpdateWorkSchedule, workSchedules,
-  type WorkScheduleRule, type InsertWorkScheduleRule, type UpdateWorkScheduleRule, workScheduleRules
+  type WorkScheduleRule, type InsertWorkScheduleRule, type UpdateWorkScheduleRule, workScheduleRules,
+  projectTasks, projectRoadmap
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -44,6 +45,7 @@ export interface IStorage {
   createProject(project: InsertProject): Promise<Project>;
   updateProject(id: number, project: UpdateProject): Promise<Project | undefined>;
   deleteProject(id: number): Promise<boolean>;
+  forceDeleteProject(id: number): Promise<boolean>;
 
   // Users
   getUsers(): Promise<User[]>;
@@ -261,6 +263,75 @@ export class DatabaseStorage implements IStorage {
       }
     } catch (error) {
       console.error(`❌ Storage: Error deleting project ${id}:`, error);
+      throw error;
+    }
+  }
+
+  async forceDeleteProject(id: number): Promise<boolean> {
+    try {
+      console.log(`🗑️ Storage: FORCE deleting project with ID: ${id}`);
+
+      // Check if project exists first
+      const existingProject = await this.getProject(id);
+      if (!existingProject) {
+        console.log(`❌ Storage: Project with ID ${id} not found`);
+        return false;
+      }
+
+      console.log(`📋 Storage: Found project: "${existingProject.name}" (ID: ${id})`);
+      console.log(`⚠️ Storage: FORCE DELETE - Will remove ALL dependencies`);
+
+      // Step 1: Delete all appointments linked to this project
+      const appointmentsResult = await db.delete(appointments).where(eq(appointments.projectId, id));
+      const deletedAppointments = appointmentsResult.rowCount || 0;
+      console.log(`🗑️ Storage: Deleted ${deletedAppointments} appointments`);
+
+      // Step 2: Delete project subphases (via project phases)
+      const projectPhasesResult = await db.select().from(projectPhases).where(eq(projectPhases.projectId, id));
+      let deletedSubphases = 0;
+
+      for (const projectPhase of projectPhasesResult) {
+        const subphasesResult = await db.delete(projectSubphases).where(eq(projectSubphases.projectPhaseId, projectPhase.id));
+        deletedSubphases += subphasesResult.rowCount || 0;
+      }
+      console.log(`🗑️ Storage: Deleted ${deletedSubphases} project subphases`);
+
+      // Step 3: Delete project phases
+      const phasesResult = await db.delete(projectPhases).where(eq(projectPhases.projectId, id));
+      const deletedPhases = phasesResult.rowCount || 0;
+      console.log(`🗑️ Storage: Deleted ${deletedPhases} project phases`);
+
+      // Step 4: Delete project tasks
+      const tasksResult = await db.delete(projectTasks).where(eq(projectTasks.projectId, id));
+      const deletedTasks = tasksResult.rowCount || 0;
+      console.log(`🗑️ Storage: Deleted ${deletedTasks} project tasks`);
+
+      // Step 5: Delete project roadmap entries
+      const roadmapResult = await db.delete(projectRoadmap).where(eq(projectRoadmap.projectId, id));
+      const deletedRoadmap = roadmapResult.rowCount || 0;
+      console.log(`🗑️ Storage: Deleted ${deletedRoadmap} roadmap entries`);
+
+      // Step 6: Finally delete the project itself
+      const projectResult = await db.delete(projects).where(eq(projects.id, id));
+      const deletedProject = projectResult.rowCount || 0;
+
+      console.log(`📊 Storage: FORCE DELETE Summary for project ${id}:`);
+      console.log(`   - Appointments: ${deletedAppointments}`);
+      console.log(`   - Project Subphases: ${deletedSubphases}`);
+      console.log(`   - Project Phases: ${deletedPhases}`);
+      console.log(`   - Project Tasks: ${deletedTasks}`);
+      console.log(`   - Roadmap Entries: ${deletedRoadmap}`);
+      console.log(`   - Project: ${deletedProject}`);
+
+      if (deletedProject > 0) {
+        console.log(`✅ Storage: Project ${id} FORCE deleted successfully`);
+        return true;
+      } else {
+        console.log(`❌ Storage: Failed to delete project ${id}`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`❌ Storage: Error force deleting project ${id}:`, error);
       throw error;
     }
   }
@@ -880,31 +951,20 @@ export class DatabaseStorage implements IStorage {
       allowOverlap: finalAllowOverlap,
     };
 
-    const [appointment] = await db.insert(appointments).values(appointmentData).returning();
+    console.log("🎯 STORAGE - About to insert appointment with data:", appointmentData);
 
-    // Auto-create Pomodoro if not already a Pomodoro
-    if (!appointment.isPomodoro) {
-      const pomodoroStartTime = appointment.endTime;
-      const pomodoroEndTime = this.calculateEndTime(pomodoroStartTime, 5);
-      
-      await db.insert(appointments).values({
-        title: "Pomodoro",
-        description: "Pausa automática",
-        date: appointment.date,
-        startTime: pomodoroStartTime,
-        durationMinutes: 5,
-        endTime: pomodoroEndTime,
-        peopleWith: null,
-        project: null,
-        company: null,
-        slaMinutes: null,
-        status: "scheduled",
-        isPomodoro: true,
-        completedAt: null,
-      });
+    try {
+      const [appointment] = await db.insert(appointments).values(appointmentData).returning();
+      console.log("✅ STORAGE - Appointment created successfully:", appointment);
+      return appointment;
+    } catch (dbError) {
+      console.error("❌ STORAGE - Database error during appointment creation:", dbError);
+      console.error("❌ STORAGE - Failed appointment data:", appointmentData);
+      throw dbError;
     }
 
-    return appointment;
+    // Note: Pomodoro creation is now handled by frontend confirmation dialog
+    console.log("✅ STORAGE - Appointment creation completed, returning appointment");
   }
 
   async updateAppointment(id: string, updateData: UpdateAppointment): Promise<Appointment | undefined> {
@@ -2670,8 +2730,78 @@ export class DatabaseStorage implements IStorage {
       ` as any, [progress, projectPhaseId]);
 
       console.log(`✅ Phase ${projectPhaseId} progress updated to ${progress}%`);
+
+      // Get the project ID to update project progress
+      const phaseResult = await db.execute(`
+        SELECT project_id FROM project_phases WHERE id = ?
+      ` as any, [projectPhaseId]);
+
+      const phase = (phaseResult as any).rows[0];
+      if (phase) {
+        // Update project progress
+        await this.updateProjectProgress(phase.project_id);
+      }
     } catch (error) {
       console.error("Error in updatePhaseProgress:", error);
+      throw error;
+    }
+  }
+
+  // Calculate subphase progress based on completed appointments/tasks
+  async calculateSubphaseProgress(projectSubphaseId: number): Promise<number> {
+    try {
+      console.log(`📊 Calculating progress for project subphase ${projectSubphaseId}`);
+
+      // Get all appointments linked to this project subphase
+      const subphaseAppointments = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.projectSubphaseId, projectSubphaseId));
+
+      if (subphaseAppointments.length === 0) {
+        console.log(`📊 No appointments found for subphase ${projectSubphaseId}, progress = 0%`);
+        return 0;
+      }
+
+      // Calculate progress based on completed vs total appointments
+      const completedAppointments = subphaseAppointments.filter(apt => apt.status === 'completed');
+      const progressPercentage = Math.round((completedAppointments.length / subphaseAppointments.length) * 100);
+
+      console.log(`📊 Subphase ${projectSubphaseId}: ${completedAppointments.length}/${subphaseAppointments.length} appointments completed = ${progressPercentage}%`);
+
+      return progressPercentage;
+    } catch (error) {
+      console.error("Error in calculateSubphaseProgress:", error);
+      return 0;
+    }
+  }
+
+  // Update subphase progress and cascade to phase and project
+  async updateSubphaseProgress(projectSubphaseId: number): Promise<void> {
+    try {
+      const progress = await this.calculateSubphaseProgress(projectSubphaseId);
+
+      // Update the project subphase progress
+      await db.execute(`
+        UPDATE project_subphases
+        SET progress_percentage = ?
+        WHERE id = ?
+      ` as any, [progress, projectSubphaseId]);
+
+      console.log(`✅ Subphase ${projectSubphaseId} progress updated to ${progress}%`);
+
+      // Get the project phase ID to update phase progress
+      const subphaseResult = await db.execute(`
+        SELECT project_phase_id FROM project_subphases WHERE id = ?
+      ` as any, [projectSubphaseId]);
+
+      const subphase = (subphaseResult as any).rows[0];
+      if (subphase) {
+        // Update phase progress (which will cascade to project)
+        await this.updatePhaseProgress(subphase.project_phase_id);
+      }
+    } catch (error) {
+      console.error("Error in updateSubphaseProgress:", error);
       throw error;
     }
   }
@@ -3103,6 +3233,147 @@ export class DatabaseStorage implements IStorage {
       console.log("🎉 Subphases migration completed successfully!");
     } catch (error) {
       console.error("❌ Subphases migration failed:", error);
+      throw error;
+    }
+  }
+
+  async migrateProgressCalculation(): Promise<void> {
+    try {
+      console.log("🔄 Starting progress calculation migration...");
+
+      // Add project_subphase_id column to appointments if not exists
+      console.log("📝 Adding project_subphase_id column to appointments...");
+      await db.execute(`
+        ALTER TABLE appointments
+        ADD COLUMN IF NOT EXISTS project_subphase_id INTEGER
+        REFERENCES project_subphases(id) ON DELETE SET NULL
+      ` as any);
+      console.log("✅ project_subphase_id column added");
+
+      // Create index for better performance
+      console.log("📝 Creating index for project_subphase_id...");
+      await db.execute(`
+        CREATE INDEX IF NOT EXISTS idx_appointments_project_subphase_id
+        ON appointments(project_subphase_id)
+      ` as any);
+      console.log("✅ Index created");
+
+      // Create progress calculation triggers
+      console.log("📝 Creating progress calculation triggers...");
+
+      // Function to update subphase progress when appointments change
+      await db.execute(`
+        CREATE OR REPLACE FUNCTION update_subphase_progress_trigger()
+        RETURNS TRIGGER AS $$
+        DECLARE
+            subphase_id INTEGER;
+            total_appointments INTEGER;
+            completed_appointments INTEGER;
+            progress_percentage INTEGER;
+            phase_id INTEGER;
+            project_id INTEGER;
+        BEGIN
+            -- Get the project_subphase_id from the appointment
+            IF TG_OP = 'UPDATE' THEN
+                subphase_id := NEW.project_subphase_id;
+            ELSIF TG_OP = 'DELETE' THEN
+                subphase_id := OLD.project_subphase_id;
+            END IF;
+
+            -- Only proceed if appointment is linked to a subphase
+            IF subphase_id IS NOT NULL THEN
+                -- Calculate subphase progress
+                SELECT COUNT(*) INTO total_appointments
+                FROM appointments
+                WHERE project_subphase_id = subphase_id;
+
+                SELECT COUNT(*) INTO completed_appointments
+                FROM appointments
+                WHERE project_subphase_id = subphase_id
+                AND status = 'completed';
+
+                -- Calculate progress percentage
+                IF total_appointments > 0 THEN
+                    progress_percentage := ROUND((completed_appointments::DECIMAL / total_appointments) * 100);
+                ELSE
+                    progress_percentage := 0;
+                END IF;
+
+                -- Update project subphase progress
+                UPDATE project_subphases
+                SET progress_percentage = progress_percentage,
+                    actual_hours = (
+                        SELECT COALESCE(SUM(COALESCE(actual_time_minutes, duration_minutes)), 0) / 60.0
+                        FROM appointments
+                        WHERE project_subphase_id = subphase_id
+                        AND status = 'completed'
+                    )
+                WHERE id = subphase_id;
+
+                -- Get phase and project IDs for cascading updates
+                SELECT ps.project_phase_id, pp.project_id
+                INTO phase_id, project_id
+                FROM project_subphases ps
+                JOIN project_phases pp ON ps.project_phase_id = pp.id
+                WHERE ps.id = subphase_id;
+
+                -- Update phase progress (average of all subphases in the phase)
+                IF phase_id IS NOT NULL THEN
+                    UPDATE project_phases
+                    SET progress_percentage = (
+                        SELECT COALESCE(ROUND(AVG(progress_percentage)), 0)
+                        FROM project_subphases
+                        WHERE project_phase_id = phase_id
+                    )
+                    WHERE id = phase_id;
+
+                    -- Update project progress (average of all phases in the project)
+                    IF project_id IS NOT NULL THEN
+                        UPDATE projects
+                        SET progress_percentage = (
+                            SELECT COALESCE(ROUND(AVG(progress_percentage)), 0)
+                            FROM project_phases
+                            WHERE project_id = project_id
+                        )
+                        WHERE id = project_id;
+                    END IF;
+                END IF;
+            END IF;
+
+            IF TG_OP = 'DELETE' THEN
+                RETURN OLD;
+            ELSE
+                RETURN NEW;
+            END IF;
+        END;
+        $$ LANGUAGE plpgsql;
+      ` as any);
+      console.log("✅ Progress trigger function created");
+
+      // Create triggers for appointment changes
+      await db.execute(`
+        DROP TRIGGER IF EXISTS trigger_update_subphase_progress_on_appointment_update ON appointments;
+        DROP TRIGGER IF EXISTS trigger_update_subphase_progress_on_appointment_delete ON appointments;
+      ` as any);
+
+      await db.execute(`
+        CREATE TRIGGER trigger_update_subphase_progress_on_appointment_update
+            AFTER UPDATE OF status, project_subphase_id, actual_time_minutes ON appointments
+            FOR EACH ROW
+            EXECUTE FUNCTION update_subphase_progress_trigger();
+      ` as any);
+
+      await db.execute(`
+        CREATE TRIGGER trigger_update_subphase_progress_on_appointment_delete
+            AFTER DELETE ON appointments
+            FOR EACH ROW
+            EXECUTE FUNCTION update_subphase_progress_trigger();
+      ` as any);
+      console.log("✅ Progress triggers created");
+
+      console.log("🎉 Progress calculation migration completed successfully!");
+    } catch (error) {
+      console.error("❌ Progress calculation migration failed:", error);
       throw error;
     }
   }

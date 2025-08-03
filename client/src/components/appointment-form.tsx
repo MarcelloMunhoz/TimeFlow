@@ -17,6 +17,8 @@ import { Info, Save, AlertTriangle } from "lucide-react";
 import { z } from "zod";
 import SmartTimePicker from "@/components/smart-time-picker";
 import ConflictWarningDialog from "@/components/conflict-warning-dialog";
+import WeekendConfirmationDialog from "@/components/weekend-confirmation-dialog";
+import PomodoroConfirmationDialog from "@/components/pomodoro-confirmation-dialog";
 import { useConflictCheck } from "@/hooks/use-time-slot-availability";
 
 const formSchema = z.object({
@@ -65,7 +67,17 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
   const queryClient = useQueryClient();
   const [endTime, setEndTime] = useState("");
   const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [showWeekendDialog, setShowWeekendDialog] = useState(false);
+  const [weekendConfirmationData, setWeekendConfirmationData] = useState<any>(null);
   const [pendingSubmission, setPendingSubmission] = useState<any>(null);
+
+  // Pomodoro confirmation states
+  const [showPomodoroDialog, setShowPomodoroDialog] = useState(false);
+  const [pomodoroConfirmationData, setPomodoroConfirmationData] = useState<{
+    appointmentId: string;
+    appointmentTitle: string;
+    appointmentEndTime: string;
+  } | null>(null);
 
   const isEditing = !!editingAppointment;
 
@@ -183,6 +195,21 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       }
 
       toast({ title: successMessage });
+
+      // Show Pomodoro confirmation dialog for new appointments (not Pomodoros themselves)
+      if (!isEditing && result && !result.isPomodoro) {
+        const formValues = form.getValues();
+        const durationMinutes = formValues.durationUnit === "hours" ? formValues.durationValue * 60 : formValues.durationValue;
+        const endTime = calculateEndTime(formValues.startTime, durationMinutes);
+
+        setPomodoroConfirmationData({
+          appointmentId: result.id,
+          appointmentTitle: result.title,
+          appointmentEndTime: endTime
+        });
+        setShowPomodoroDialog(true);
+      }
+
       onOpenChange(false);
       form.reset();
     },
@@ -193,6 +220,22 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
         data: error?.response?.data,
         status: error?.response?.status
       });
+
+      // Handle weekend confirmation needed (status 422)
+      if (error?.response?.status === 422 && error?.response?.data?.code === "WEEKEND_CONFIRMATION_NEEDED") {
+        console.log("🎯 Weekend confirmation needed, showing dialog");
+        console.log("🎯 Error response data:", error.response.data);
+        const formValues = form.getValues();
+        console.log("🎯 Form values:", formValues);
+        setWeekendConfirmationData({
+          message: error.response.data.message,
+          dayType: error.response.data.dayType,
+          pendingData: formValues
+        });
+        setShowWeekendDialog(true);
+        console.log("🎯 Weekend dialog state set to true");
+        return;
+      }
 
       let message = isEditing ? "Erro ao atualizar agendamento" : "Erro ao criar agendamento";
 
@@ -251,8 +294,74 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
     // or use the smart time picker suggestions
   };
 
+  // Handle weekend confirmation
+  const handleProceedWithWeekend = () => {
+    console.log("🎯 handleProceedWithWeekend called");
+    console.log("🎯 weekendConfirmationData:", weekendConfirmationData);
+
+    if (weekendConfirmationData?.pendingData) {
+      const values = weekendConfirmationData.pendingData;
+      console.log("🎯 Pending data values:", values);
+
+      const durationMinutes = values.durationUnit === "hours" ? values.durationValue * 60 : values.durationValue;
+      const slaMinutes = values.slaValue && values.slaUnit
+        ? (values.slaUnit === "hours" ? values.slaValue * 60 : values.slaValue)
+        : undefined;
+
+      console.log("🎯 Calculated durationMinutes:", durationMinutes);
+      console.log("🎯 Calculated slaMinutes:", slaMinutes);
+      console.log("🎯 About to call submitAppointment with allowWeekendOverride: true");
+
+      // Submit with weekend override allowed
+      submitAppointment({ values, durationMinutes, slaMinutes, allowWeekendOverride: true });
+      setWeekendConfirmationData(null);
+      setShowWeekendDialog(false);
+    } else {
+      console.log("🎯 ERROR: No pending data found in weekendConfirmationData");
+    }
+  };
+
+  // Handle canceling weekend appointment
+  const handleCancelWeekend = () => {
+    setShowWeekendDialog(false);
+    setWeekendConfirmationData(null);
+  };
+
+  // Handle Pomodoro confirmation
+  const handleConfirmPomodoro = async () => {
+    if (pomodoroConfirmationData) {
+      try {
+        await apiRequest('POST', `/api/appointments/${pomodoroConfirmationData.appointmentId}/pomodoro`, {});
+        toast({ title: "Pausa Pomodoro agendada com sucesso!" });
+        queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+      } catch (error) {
+        console.error("Error creating Pomodoro:", error);
+        toast({
+          title: "Erro ao agendar pausa Pomodoro",
+          description: "O agendamento principal foi criado com sucesso.",
+          variant: "destructive"
+        });
+      }
+    }
+    setShowPomodoroDialog(false);
+    setPomodoroConfirmationData(null);
+  };
+
+  // Handle skipping Pomodoro
+  const handleSkipPomodoro = () => {
+    setShowPomodoroDialog(false);
+    setPomodoroConfirmationData(null);
+  };
+
   // Extract submission logic to reusable function
-  const submitAppointment = ({ values, durationMinutes, slaMinutes, allowOverlap = false }: any) => {
+  const submitAppointment = ({ values, durationMinutes, slaMinutes, allowOverlap = false, allowWeekendOverride = false }: any) => {
+    console.log("🎯 submitAppointment called with:");
+    console.log("🎯 - values:", values);
+    console.log("🎯 - durationMinutes:", durationMinutes);
+    console.log("🎯 - slaMinutes:", slaMinutes);
+    console.log("🎯 - allowOverlap:", allowOverlap);
+    console.log("🎯 - allowWeekendOverride:", allowWeekendOverride);
+
     const appointmentData: any = {
       title: values.title,
       description: values.description || null,
@@ -266,6 +375,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       isPomodoro: values.isPomodoro || false,
       rescheduleCount: 0,
       allowOverlap, // Add allowOverlap parameter
+      allowWeekendOverride, // Add allowWeekendOverride parameter
       // Assignment fields
       projectId: values.projectId && values.projectId !== "none" ? parseInt(values.projectId) : null,
       companyId: values.companyId && values.companyId !== "none" ? parseInt(values.companyId) : null,
@@ -286,7 +396,8 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       }
     }
 
-    console.log("Sending appointment data:", appointmentData);
+    console.log("🎯 Final appointment data being sent:", appointmentData);
+    console.log("🎯 About to call createAppointmentMutation.mutate");
     createAppointmentMutation.mutate(appointmentData);
   };
 
@@ -924,6 +1035,41 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
         onProceedWithOverlap={handleProceedWithOverlap}
         onSelectDifferentTime={handleSelectDifferentTime}
       />
+
+      {/* Weekend Confirmation Dialog */}
+      {weekendConfirmationData && (
+        <WeekendConfirmationDialog
+          open={showWeekendDialog}
+          onOpenChange={setShowWeekendDialog}
+          message={weekendConfirmationData.message}
+          dayType={weekendConfirmationData.dayType}
+          appointmentData={{
+            title: form.getValues("title") || "Novo Agendamento",
+            date: selectedDate,
+            startTime: startTime || "00:00",
+            durationValue: durationValue || 1,
+            durationUnit: durationUnit || "hours"
+          }}
+          onProceedWithWeekend={handleProceedWithWeekend}
+          onCancel={handleCancelWeekend}
+        />
+      )}
+
+      {/* Pomodoro Confirmation Dialog */}
+      {pomodoroConfirmationData && (
+        <PomodoroConfirmationDialog
+          open={showPomodoroDialog}
+          onOpenChange={setShowPomodoroDialog}
+          appointmentTitle={pomodoroConfirmationData.appointmentTitle}
+          appointmentEndTime={pomodoroConfirmationData.appointmentEndTime}
+          onConfirm={handleConfirmPomodoro}
+          onSkip={handleSkipPomodoro}
+        />
+      )}
+
+      {/* Debug log for weekend confirmation data */}
+      {console.log("🎯 Render - weekendConfirmationData:", weekendConfirmationData)}
+      {console.log("🎯 Render - showWeekendDialog:", showWeekendDialog)}
     </CustomModal>
   );
 }

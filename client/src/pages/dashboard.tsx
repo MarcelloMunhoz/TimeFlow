@@ -11,7 +11,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
-type ViewMode = "month" | "week" | "day";
+type ViewMode = "week" | "day";
 
 // Project Status Card Component
 function ProjectStatusCard() {
@@ -117,7 +117,7 @@ function QuickActionsCard() {
 export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
-  const [viewMode, setViewMode] = useState<ViewMode>('month');
+  const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
 
 
@@ -185,14 +185,6 @@ export default function Dashboard() {
               {/* View Mode Toggle (only show when calendar view is active) */}
               {view === 'calendar' && (
                 <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
-                  <Button
-                    variant={viewMode === 'month' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('month')}
-                    className={viewMode === 'month' ? 'bg-white text-yellow-600 shadow-sm' : ''}
-                  >
-                    Mês
-                  </Button>
                   <Button
                     variant={viewMode === 'week' ? 'default' : 'ghost'}
                     size="sm"

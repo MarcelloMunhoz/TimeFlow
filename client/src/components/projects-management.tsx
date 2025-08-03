@@ -195,7 +195,12 @@ export default function ProjectsManagement() {
 
   // Handle delete
   const handleDelete = (id: number) => {
-    if (confirm("Tem certeza que deseja excluir este projeto?")) {
+    const project = projects?.find(p => p.id === id);
+    const projectName = project?.name || `ID ${id}`;
+
+    const confirmMessage = `Tem certeza que deseja excluir o projeto "${projectName}"?\n\n⚠️ ATENÇÃO: Se este projeto possuir agendamentos, fases ou outras dependências, a exclusão será bloqueada.\n\nEsta ação não pode ser desfeita.`;
+
+    if (confirm(confirmMessage)) {
       deleteProjectMutation.mutate(id);
     }
   };
@@ -261,8 +266,34 @@ export default function ProjectsManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       toast({ title: "Projeto excluído com sucesso!" });
     },
-    onError: () => {
-      toast({ title: "Erro ao excluir projeto", variant: "destructive" });
+    onError: async (error: any) => {
+      console.error("Delete project error:", error);
+
+      try {
+        // Try to get the error response
+        const errorResponse = await error.response?.json();
+
+        if (errorResponse?.type === "constraint_violation") {
+          toast({
+            title: "Não é possível excluir este projeto",
+            description: errorResponse.details || "Este projeto possui dependências que impedem sua exclusão.",
+            variant: "destructive",
+            duration: 8000
+          });
+        } else {
+          toast({
+            title: "Erro ao excluir projeto",
+            description: errorResponse?.message || "Erro desconhecido",
+            variant: "destructive"
+          });
+        }
+      } catch {
+        toast({
+          title: "Erro ao excluir projeto",
+          description: "Verifique se o projeto não possui agendamentos ou outras dependências.",
+          variant: "destructive"
+        });
+      }
     },
   });
 

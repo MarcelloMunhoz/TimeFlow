@@ -378,8 +378,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/projects/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      console.log(`DELETE /api/projects/${id} - Starting deletion process`);
-      const deleted = await storage.deleteProject(parseInt(id));
+      const { force } = req.query;
+
+      console.log(`DELETE /api/projects/${id} - Starting deletion process (force: ${force})`);
+
+      let deleted;
+      if (force === 'true') {
+        console.log(`🗑️ FORCE DELETE requested for project ${id}`);
+        deleted = await storage.forceDeleteProject(parseInt(id));
+      } else {
+        deleted = await storage.deleteProject(parseInt(id));
+      }
+
       if (!deleted) {
         console.log(`DELETE /api/projects/${id} - Project not found`);
         return res.status(404).json({ message: "Project not found" });
@@ -860,6 +870,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching project subphases:", error);
       res.status(500).json({ message: "Failed to fetch project subphases" });
+    }
+  });
+
+  // Link appointment to project subphase
+  app.post("/api/appointments/:appointmentId/link-subphase", async (req, res) => {
+    try {
+      const { appointmentId } = req.params;
+      const { projectSubphaseId } = req.body;
+
+      console.log(`🔗 Linking appointment ${appointmentId} to subphase ${projectSubphaseId}`);
+
+      // Update the appointment with the subphase link
+      const appointment = await storage.updateAppointment(appointmentId, {
+        projectSubphaseId: projectSubphaseId
+      });
+
+      if (!appointment) {
+        return res.status(404).json({ message: "Appointment not found" });
+      }
+
+      console.log(`✅ Appointment ${appointmentId} linked to subphase ${projectSubphaseId}`);
+      res.json({ message: "Appointment linked to subphase successfully", appointment });
+    } catch (error) {
+      console.error("Error linking appointment to subphase:", error);
+      res.status(500).json({ message: "Failed to link appointment to subphase" });
+    }
+  });
+
+  // Recalculate progress for a project (manual trigger)
+  app.post("/api/projects/:projectId/recalculate-progress", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+
+      console.log(`📊 Manually recalculating progress for project ${projectId}`);
+
+      // Use the database function to recalculate all progress
+      await db.execute(`SELECT recalculate_project_progress(?)` as any, [parseInt(projectId)]);
+
+      console.log(`✅ Progress recalculated for project ${projectId}`);
+      res.json({ message: "Project progress recalculated successfully" });
+    } catch (error) {
+      console.error("Error recalculating project progress:", error);
+      res.status(500).json({ message: "Failed to recalculate project progress" });
     }
   });
 
@@ -1514,6 +1567,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (dayOfWeek === 6) {
           console.log(`❌ ROTA - DETECTADO SÁBADO - Verificando se é encaixe`);
+          console.log(`🎯 ROTA - allowWeekendOverride recebido:`, req.body.allowWeekendOverride);
+          console.log(`🎯 ROTA - req.body completo:`, req.body);
           // Verificar se o usuário explicitamente permitiu encaixe
           if (!req.body.allowWeekendOverride) {
             return res.status(422).json({
@@ -1527,6 +1582,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (dayOfWeek === 0) {
           console.log(`❌ ROTA - DETECTADO DOMINGO - Verificando se é encaixe`);
+          console.log(`🎯 ROTA - allowWeekendOverride recebido:`, req.body.allowWeekendOverride);
+          console.log(`🎯 ROTA - req.body completo:`, req.body);
           // Verificar se o usuário explicitamente permitiu encaixe
           if (!req.body.allowWeekendOverride) {
             return res.status(422).json({
@@ -1553,6 +1610,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Error creating appointment:", error);
       res.status(500).json({ message: "Failed to create appointment" });
+    }
+  });
+
+  // Create optional Pomodoro break
+  app.post("/api/appointments/:id/pomodoro", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get the main appointment
+      const mainAppointment = await storage.getAppointment(id);
+      if (!mainAppointment) {
+        return res.status(404).json({ message: "Appointment not found" });
+      }
+
+      // Create Pomodoro break
+      const pomodoroData = {
+        title: "Pomodoro",
+        description: "Pausa de 5 minutos",
+        date: mainAppointment.date,
+        startTime: mainAppointment.endTime,
+        durationMinutes: 5,
+        isPomodoro: true,
+        // Copy assignment fields from main appointment
+        projectId: mainAppointment.projectId,
+        companyId: mainAppointment.companyId,
+        assignedUserId: mainAppointment.assignedUserId,
+        phaseId: mainAppointment.phaseId,
+        // Copy work schedule compliance
+        isWithinWorkHours: mainAppointment.isWithinWorkHours,
+        isOvertime: mainAppointment.isOvertime,
+        workScheduleViolation: mainAppointment.workScheduleViolation,
+      };
+
+      const pomodoro = await storage.createAppointment(pomodoroData);
+      res.status(201).json(pomodoro);
+    } catch (error) {
+      console.error("Error creating Pomodoro:", error);
+      res.status(500).json({ message: "Failed to create Pomodoro break" });
     }
   });
 

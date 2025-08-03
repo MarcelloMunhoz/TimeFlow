@@ -53,8 +53,17 @@ export default function ManagementPage() {
     }
   });
 
+  const { data: subphases = [], isLoading: subphasesLoading, error: subphasesError } = useQuery<any[]>({
+    queryKey: ['/api/subphases'],
+    queryFn: async () => {
+      const response = await fetch('/api/subphases');
+      if (!response.ok) throw new Error('Failed to fetch subphases');
+      return response.json();
+    }
+  });
+
   // Show loading state
-  if (companiesLoading || projectsLoading || usersLoading || phasesLoading) {
+  if (companiesLoading || projectsLoading || usersLoading || phasesLoading || subphasesLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -66,13 +75,13 @@ export default function ManagementPage() {
   }
 
   // Show error state
-  if (companiesError || projectsError || usersError || phasesError) {
+  if (companiesError || projectsError || usersError || phasesError || subphasesError) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-4">Erro ao carregar dados</h1>
           <p className="text-gray-600 mb-4">
-            {companiesError?.message || projectsError?.message || usersError?.message || phasesError?.message}
+            {companiesError?.message || projectsError?.message || usersError?.message || phasesError?.message || subphasesError?.message}
           </p>
           <Button onClick={() => window.location.reload()}>Tentar novamente</Button>
         </div>
@@ -80,7 +89,8 @@ export default function ManagementPage() {
     );
   }
 
-  const subphasesCount = 0; // Simplified for now
+  // Use the actual subphases count from the API
+  const subphasesCount = subphases.length;
 
   const handleGoHome = () => {
     setLocation("/");

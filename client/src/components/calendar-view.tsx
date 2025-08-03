@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Clock, User, Building } from "lucide-react";
 import { getCalendarDays, formatDate, getTodayString } from "@/lib/date-utils";
 import { format, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, startOfWeek, endOfWeek, eachDayOfInterval } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
@@ -11,7 +11,7 @@ import { ptBR } from "date-fns/locale";
 interface CalendarViewProps {
   selectedDate: string;
   onDateSelect: (date: string) => void;
-  viewMode: "month" | "week" | "day";
+  viewMode: "week" | "day";
 }
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -38,12 +38,10 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
       case 'day':
         return [currentDate];
       case 'week':
+      default:
         const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
         const weekEnd = endOfWeek(currentDate, { weekStartsOn: 0 });
         return eachDayOfInterval({ start: weekStart, end: weekEnd });
-      case 'month':
-      default:
-        return getCalendarDays(currentDate).map(day => new Date(day.dateString));
     }
   };
 
@@ -74,10 +72,8 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
         case 'day':
           return direction === 'prev' ? subDays(prev, 1) : addDays(prev, 1);
         case 'week':
-          return direction === 'prev' ? subWeeks(prev, 1) : addWeeks(prev, 1);
-        case 'month':
         default:
-          return direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1);
+          return direction === 'prev' ? subWeeks(prev, 1) : addWeeks(prev, 1);
       }
     });
   };
@@ -92,137 +88,253 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
       case 'day':
         return format(currentDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
       case 'week':
+      default:
         const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
         const weekEnd = endOfWeek(currentDate, { weekStartsOn: 0 });
         return `${format(weekStart, 'dd MMM', { locale: ptBR })} - ${format(weekEnd, 'dd MMM yyyy', { locale: ptBR })}`;
-      case 'month':
-      default:
-        return format(currentDate, 'MMMM yyyy', { locale: ptBR });
     }
   };
 
-  const renderMonthView = () => {
-    const calendarDays = getCalendarDays(currentDate);
-    
-    return (
-      <>
-        <div className="grid grid-cols-7 gap-1 mb-2">
-          {WEEKDAYS.map((day) => (
-            <div key={day} className="p-3 text-center text-sm font-medium text-gray-500">
-              {day}
-            </div>
-          ))}
-        </div>
 
-        <div className="grid grid-cols-7 gap-1">
-          {calendarDays.map((day) => {
-            const dayAppointments = getAppointmentsForDate(day.dateString);
-            const isSelected = selectedDate === day.dateString;
-            
-            return (
-              <div
-                key={day.dateString}
-                className={cn(
-                  "min-h-24 p-2 border border-gray-100 hover:bg-gray-50 cursor-pointer relative",
-                  {
-                    "bg-blue-50 border-blue-300": isSelected,
-                    "text-gray-400": !day.isCurrentMonth,
-                    "font-bold text-blue-600": day.isToday,
-                  }
-                )}
-                onClick={() => onDateSelect(day.dateString)}
-              >
-                <span className={cn("text-sm", {
-                  "font-semibold": day.isCurrentMonth,
-                  "text-blue-600": day.isToday
-                })}>
-                  {day.dayNumber}
-                </span>
-                
-                {dayAppointments.length > 0 && (
-                  <div className="mt-1 space-y-1">
-                    {dayAppointments.slice(0, 3).map((apt: any) => {
-                      const status = getStatusForAppointment(apt);
-                      return (
-                        <div
-                          key={apt.id}
-                          className={cn("w-full h-1.5 rounded", STATUS_COLORS[status])}
-                          title={`${apt.title} - ${status}`}
-                        />
-                      );
-                    })}
-                    {dayAppointments.length > 3 && (
-                      <div className="text-xs text-gray-500 text-center">
-                        +{dayAppointments.length - 3} mais
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </>
-    );
-  };
 
   const renderWeekView = () => {
     return (
-      <>
-        <div className="grid grid-cols-7 gap-1 mb-2">
-          {WEEKDAYS.map((day) => (
-            <div key={day} className="p-3 text-center text-sm font-medium text-gray-500">
-              {day}
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7 gap-1">
-          {daysToShow.map((day) => {
+      <div className="space-y-6">
+        {/* Week Header */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {daysToShow.slice(1, 6).map((day) => { // Monday to Friday
             const dayString = format(day, 'yyyy-MM-dd');
             const dayAppointments = getAppointmentsForDate(dayString);
             const isSelected = selectedDate === dayString;
             const isToday = dayString === today;
-            
+
             return (
-              <div
-                key={dayString}
-                className={cn(
-                  "min-h-32 p-2 border border-gray-100 hover:bg-gray-50 cursor-pointer",
-                  {
-                    "bg-blue-50 border-blue-300": isSelected,
-                    "font-bold text-blue-600": isToday,
-                  }
-                )}
-                onClick={() => onDateSelect(dayString)}
-              >
-                <span className={cn("text-sm font-semibold", {
-                  "text-blue-600": isToday
-                })}>
-                  {format(day, 'dd')}
-                </span>
-                
-                {dayAppointments.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {dayAppointments.map((apt: any) => {
-                      const status = getStatusForAppointment(apt);
-                      return (
-                        <div
-                          key={apt.id}
-                          className={cn("text-xs p-1 rounded text-white truncate", STATUS_COLORS[status])}
-                          title={`ID: ${apt.id} - ${apt.startTime} - ${apt.title}`}
-                        >
-                          {apt.startTime} {apt.title}
-                        </div>
-                      );
-                    })}
+              <div key={dayString} className="space-y-3">
+                {/* Day Header */}
+                <div className="text-center">
+                  <div className={cn("text-sm font-medium text-gray-500 uppercase tracking-wide")}>
+                    {format(day, 'EEEE', { locale: ptBR })}
                   </div>
-                )}
+                  <div
+                    className={cn(
+                      "text-2xl font-bold mt-1 cursor-pointer hover:text-blue-600 transition-colors",
+                      {
+                        "text-blue-600": isSelected,
+                        "text-blue-700 bg-blue-100 rounded-full w-10 h-10 flex items-center justify-center mx-auto": isToday,
+                      }
+                    )}
+                    onClick={() => onDateSelect(dayString)}
+                  >
+                    {format(day, 'dd')}
+                  </div>
+                </div>
+
+                {/* Time Slots */}
+                <div className="space-y-2 min-h-[400px] md:min-h-[600px]">
+                  {/* Morning Slot (08:00 - 12:00) */}
+                  <div className="bg-gray-50 rounded-lg p-3 min-h-[100px] md:min-h-[140px]">
+                    <div className="text-xs text-gray-500 font-medium mb-2">08:00</div>
+                    {dayAppointments
+                      .filter((apt: any) => {
+                        const hour = parseInt(apt.startTime.split(':')[0]);
+                        return hour >= 8 && hour < 12;
+                      })
+                      .slice(0, 3) // Limit to 3 appointments per slot
+                      .map((apt: any) => {
+                        const status = getStatusForAppointment(apt);
+                        return (
+                          <div
+                            key={apt.id}
+                            className={cn(
+                              "mb-2 p-2 rounded-lg border-l-4 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer",
+                              {
+                                "border-l-green-500": status === 'completed',
+                                "border-l-red-500": status === 'delayed',
+                                "border-l-blue-500": status === 'future',
+                                "border-l-gray-400": status === 'pomodoro',
+                              }
+                            )}
+                            title={`${apt.startTime} - ${apt.title}`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <Clock className="w-3 h-3 text-gray-500" />
+                              <div className="text-xs font-medium text-gray-600">
+                                {apt.startTime}
+                              </div>
+                              {apt.isPomodoro && (
+                                <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                              )}
+                            </div>
+                            <div className="text-sm font-medium text-gray-900 truncate">
+                              {apt.title}
+                            </div>
+                            {apt.description && (
+                              <div className="text-xs text-gray-500 truncate mt-1">
+                                {apt.description}
+                              </div>
+                            )}
+                            {apt.company && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Building className="w-3 h-3 text-gray-500" />
+                                <div className="text-xs text-gray-600 truncate">
+                                  {apt.company}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    {/* Show "more" indicator if there are more than 3 appointments */}
+                    {dayAppointments.filter((apt: any) => {
+                      const hour = parseInt(apt.startTime.split(':')[0]);
+                      return hour >= 8 && hour < 12;
+                    }).length > 3 && (
+                      <div className="text-xs text-gray-500 text-center py-1 bg-gray-100 rounded">
+                        +{dayAppointments.filter((apt: any) => {
+                          const hour = parseInt(apt.startTime.split(':')[0]);
+                          return hour >= 8 && hour < 12;
+                        }).length - 3} mais
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Lunch Break (12:00 - 13:00) */}
+                  <div className="bg-orange-50 rounded-lg p-3 min-h-[40px] md:min-h-[60px] border border-orange-200">
+                    <div className="text-xs text-orange-600 font-medium mb-1">12:00</div>
+                    <div className="text-xs text-orange-500 italic">Almoço</div>
+                  </div>
+
+                  {/* Afternoon Slot (13:00 - 18:00) */}
+                  <div className="bg-gray-50 rounded-lg p-3 min-h-[120px] md:min-h-[200px]">
+                    <div className="text-xs text-gray-500 font-medium mb-2">13:00</div>
+                    {dayAppointments
+                      .filter((apt: any) => {
+                        const hour = parseInt(apt.startTime.split(':')[0]);
+                        return hour >= 13 && hour < 18;
+                      })
+                      .slice(0, 4) // Limit to 4 appointments per afternoon slot
+                      .map((apt: any) => {
+                        const status = getStatusForAppointment(apt);
+                        return (
+                          <div
+                            key={apt.id}
+                            className={cn(
+                              "mb-2 p-2 rounded-lg border-l-4 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer",
+                              {
+                                "border-l-green-500": status === 'completed',
+                                "border-l-red-500": status === 'delayed',
+                                "border-l-blue-500": status === 'future',
+                                "border-l-gray-400": status === 'pomodoro',
+                              }
+                            )}
+                            title={`${apt.startTime} - ${apt.title}`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <Clock className="w-3 h-3 text-gray-500" />
+                              <div className="text-xs font-medium text-gray-600">
+                                {apt.startTime}
+                              </div>
+                              {apt.isPomodoro && (
+                                <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                              )}
+                            </div>
+                            <div className="text-sm font-medium text-gray-900 truncate">
+                              {apt.title}
+                            </div>
+                            {apt.description && (
+                              <div className="text-xs text-gray-500 truncate mt-1">
+                                {apt.description}
+                              </div>
+                            )}
+                            {apt.company && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Building className="w-3 h-3 text-gray-500" />
+                                <div className="text-xs text-gray-600 truncate">
+                                  {apt.company}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    {/* Show "more" indicator if there are more than 4 appointments */}
+                    {dayAppointments.filter((apt: any) => {
+                      const hour = parseInt(apt.startTime.split(':')[0]);
+                      return hour >= 13 && hour < 18;
+                    }).length > 4 && (
+                      <div className="text-xs text-gray-500 text-center py-1 bg-gray-100 rounded">
+                        +{dayAppointments.filter((apt: any) => {
+                          const hour = parseInt(apt.startTime.split(':')[0]);
+                          return hour >= 13 && hour < 18;
+                        }).length - 4} mais
+                      </div>
+                    )}
+                  </div>
+
+                  {/* After Hours Slot (18:00+) */}
+                  <div className="bg-purple-50 rounded-lg p-3 min-h-[60px] md:min-h-[100px] border border-purple-200">
+                    <div className="text-xs text-purple-600 font-medium mb-2">18:00+</div>
+                    {dayAppointments
+                      .filter((apt: any) => {
+                        const hour = parseInt(apt.startTime.split(':')[0]);
+                        return hour >= 18;
+                      })
+                      .slice(0, 2) // Limit to 2 appointments per after-hours slot
+                      .map((apt: any) => {
+                        const status = getStatusForAppointment(apt);
+                        return (
+                          <div
+                            key={apt.id}
+                            className={cn(
+                              "mb-2 p-2 rounded-lg border-l-4 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer",
+                              {
+                                "border-l-green-500": status === 'completed',
+                                "border-l-red-500": status === 'delayed',
+                                "border-l-blue-500": status === 'future',
+                                "border-l-gray-400": status === 'pomodoro',
+                              }
+                            )}
+                            title={`${apt.startTime} - ${apt.title} (Encaixe)`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <Clock className="w-3 h-3 text-purple-500" />
+                              <div className="text-xs font-medium text-purple-600">
+                                {apt.startTime}
+                              </div>
+                              <div className="text-xs text-purple-500 bg-purple-100 px-1 rounded">
+                                Encaixe
+                              </div>
+                            </div>
+                            <div className="text-sm font-medium text-gray-900 truncate">
+                              {apt.title}
+                            </div>
+                            {apt.description && (
+                              <div className="text-xs text-gray-500 truncate mt-1">
+                                {apt.description}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    {/* Show "more" indicator if there are more than 2 appointments */}
+                    {dayAppointments.filter((apt: any) => {
+                      const hour = parseInt(apt.startTime.split(':')[0]);
+                      return hour >= 18;
+                    }).length > 2 && (
+                      <div className="text-xs text-purple-500 text-center py-1 bg-purple-100 rounded">
+                        +{dayAppointments.filter((apt: any) => {
+                          const hour = parseInt(apt.startTime.split(':')[0]);
+                          return hour >= 18;
+                        }).length - 2} mais
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             );
           })}
         </div>
-      </>
+      </div>
     );
   };
 
@@ -310,7 +422,6 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
       </div>
 
       <CardContent className="p-4">
-        {viewMode === 'month' && renderMonthView()}
         {viewMode === 'week' && renderWeekView()}
         {viewMode === 'day' && renderDayView()}
       </CardContent>

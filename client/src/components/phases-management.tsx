@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DescriptionText } from "@/components/ui/formatted-text";
-import { Trash2, Edit, Plus, Save, X, GripVertical } from "lucide-react";
+import { Trash2, Edit, Plus, Save, X, GripVertical, CheckSquare, Square } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
@@ -47,6 +47,7 @@ interface PhaseFormData {
 export default function PhasesManagement() {
   const [editingPhase, setEditingPhase] = useState<Phase | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [selectedPhases, setSelectedPhases] = useState<Set<number>>(new Set());
   const [formData, setFormData] = useState<PhaseFormData>({
     name: "",
     description: "",
@@ -267,7 +268,63 @@ export default function PhasesManagement() {
     }
   };
 
+  // Multiple selection functions
+  const handleSelectPhase = (phaseId: number) => {
+    const newSelected = new Set(selectedPhases);
+    if (newSelected.has(phaseId)) {
+      newSelected.delete(phaseId);
+    } else {
+      newSelected.add(phaseId);
+    }
+    setSelectedPhases(newSelected);
+  };
 
+  const handleSelectAll = () => {
+    if (selectedPhases.size === phases?.length) {
+      setSelectedPhases(new Set());
+    } else {
+      setSelectedPhases(new Set(phases?.map((p: Phase) => p.id) || []));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedPhases.size === 0) return;
+
+    const selectedPhasesList = phases?.filter((p: Phase) => selectedPhases.has(p.id)) || [];
+    const phaseNames = selectedPhasesList.map(p => p.name).join(', ');
+
+    const confirmed = confirm(
+      `Tem certeza que deseja excluir ${selectedPhases.size} fase(s)?\n\n` +
+      `Fases selecionadas: ${phaseNames}`
+    );
+
+    if (!confirmed) return;
+
+    // Delete phases in parallel
+    try {
+      const deletePromises = Array.from(selectedPhases).map(async (phaseId) => {
+        const response = await apiRequest("DELETE", `/api/phases/${phaseId}`);
+        return response.json();
+      });
+
+      await Promise.all(deletePromises);
+
+      toast({
+        title: "Fases excluídas com sucesso",
+        description: `${selectedPhases.size} fase(s) foram excluídas.`,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/phases"] });
+      setSelectedPhases(new Set());
+    } catch (error: any) {
+      console.error("Erro ao excluir fases:", error);
+      toast({
+        title: "Erro ao excluir fases",
+        description: error?.message || "Algumas fases podem não ter sido excluídas.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const resetForm = () => {
     setFormData({ name: "", description: "", color: "#8B5CF6" });
@@ -343,6 +400,19 @@ export default function PhasesManagement() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleSelectPhase(phase.id)}
+                className="p-1 h-auto"
+                title={selectedPhases.has(phase.id) ? "Desmarcar fase" : "Selecionar fase"}
+              >
+                {selectedPhases.has(phase.id) ? (
+                  <CheckSquare className="w-4 h-4 text-blue-600" />
+                ) : (
+                  <Square className="w-4 h-4 text-gray-400" />
+                )}
+              </Button>
               <div
                 {...attributes}
                 {...listeners}
@@ -480,7 +550,43 @@ export default function PhasesManagement() {
       {/* Phases List with Drag & Drop */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">Fases do Projeto</h3>
+          <div className="flex items-center space-x-4">
+            <h3 className="text-lg font-medium">Fases do Projeto</h3>
+            {phases && phases.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSelectAll}
+                  className="text-xs"
+                >
+                  {selectedPhases.size === phases.length ? (
+                    <>
+                      <CheckSquare className="w-3 h-3 mr-1" />
+                      Desmarcar Todos
+                    </>
+                  ) : (
+                    <>
+                      <Square className="w-3 h-3 mr-1" />
+                      Selecionar Todos
+                    </>
+                  )}
+                </Button>
+                {selectedPhases.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDeleteSelected}
+                    disabled={deletePhaseMutation.isPending}
+                    className="text-xs"
+                  >
+                    <Trash2 className="w-3 h-3 mr-1" />
+                    Excluir {selectedPhases.size} Selecionada{selectedPhases.size > 1 ? 's' : ''}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
           <p className="text-sm text-gray-500">
             Arraste as fases para reordená-las conforme a sequência do seu processo
           </p>

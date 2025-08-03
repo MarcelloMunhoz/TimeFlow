@@ -23,15 +23,15 @@ function Router() {
 
 // Component that initializes services inside QueryClientProvider
 function AppServices() {
-  // Initialize Pomodoro auto-completion service
-  usePomodoroAutoCompletion({
-    enabled: true,
-    checkIntervalMinutes: 5, // Check every 5 minutes
-    showToastNotifications: false, // Disable toast notifications to reduce spam
-    onTasksCompleted: (result) => {
-      console.log(`🍅 App: ${result.autoCompletedTasks.length} Pomodoro tasks auto-completed`);
-    }
-  });
+  // Pomodoro auto-completion service is now disabled - Pomodoros are created only on user request
+  // usePomodoroAutoCompletion({
+  //   enabled: false, // Disabled - Pomodoros are now optional via confirmation dialog
+  //   checkIntervalMinutes: 5,
+  //   showToastNotifications: false,
+  //   onTasksCompleted: (result) => {
+  //     console.log(`🍅 App: ${result.autoCompletedTasks.length} Pomodoro tasks auto-completed`);
+  //   }
+  // });
 
   return <Router />;
 }
