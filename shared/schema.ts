@@ -249,6 +249,76 @@ export const users = pgTable("users", {
   createdAt: text("created_at").notNull().default(sql`now()`),
 });
 
+// ===== FOLLOW-UP SYSTEM TABLES =====
+
+// Email Settings table (global SMTP configuration)
+export const emailSettings = pgTable("email_settings", {
+  id: serial("id").primaryKey(),
+  smtpHost: text("smtp_host").notNull(),
+  smtpPort: integer("smtp_port").notNull().default(587),
+  smtpUser: text("smtp_user").notNull(),
+  smtpPassword: text("smtp_password").notNull(), // Should be encrypted in production
+  smtpSecure: boolean("smtp_secure").default(false), // TLS/SSL
+  fromEmail: text("from_email").notNull(),
+  fromName: text("from_name").notNull().default("TimeFlow"),
+  isActive: boolean("is_active").default(true),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+  updatedAt: text("updated_at").notNull().default(sql`now()`),
+});
+
+// Follow-up Settings table (per company configuration)
+export const followUpSettings = pgTable("follow_up_settings", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").default(true),
+  emailFrequency: text("email_frequency").notNull().default("weekly"), // weekly, biweekly, monthly
+  sendDay: integer("send_day").default(1), // 1=Monday, 2=Tuesday, etc.
+  sendTime: text("send_time").default("08:00"), // HH:MM format
+  recipientEmails: text("recipient_emails"), // JSON array of email addresses
+  customTemplate: text("custom_template"), // Custom email template HTML
+  includeBlockedPhases: boolean("include_blocked_phases").default(true),
+  includeProgressCharts: boolean("include_progress_charts").default(true),
+  includeNextSteps: boolean("include_next_steps").default(true),
+  lastSentDate: text("last_sent_date"), // YYYY-MM-DD format
+  isActive: boolean("is_active").default(true),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+  updatedAt: text("updated_at").notNull().default(sql`now()`),
+});
+
+// Follow-up Reports table (historical reports)
+export const followUpReports = pgTable("follow_up_reports", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  reportDate: text("report_date").notNull(), // YYYY-MM-DD format
+  reportPeriodStart: text("report_period_start").notNull(), // YYYY-MM-DD format
+  reportPeriodEnd: text("report_period_end").notNull(), // YYYY-MM-DD format
+  contentJson: text("content_json").notNull(), // JSON with report data
+  htmlContent: text("html_content"), // Generated HTML for email
+  totalProjects: integer("total_projects").default(0),
+  completedProjects: integer("completed_projects").default(0),
+  projectsAtRisk: integer("projects_at_risk").default(0),
+  overallProgress: integer("overall_progress").default(0), // 0-100 percentage
+  emailSent: boolean("email_sent").default(false),
+  sentAt: text("sent_at"), // ISO timestamp when email was sent
+  generatedBy: integer("generated_by").references(() => users.id), // User who generated (null for auto)
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
+// Email Logs table (tracking email delivery)
+export const emailLogs = pgTable("email_logs", {
+  id: serial("id").primaryKey(),
+  reportId: integer("report_id").references(() => followUpReports.id, { onDelete: "cascade" }),
+  recipientEmail: text("recipient_email").notNull(),
+  subject: text("subject").notNull(),
+  status: text("status").notNull().default("pending"), // pending, sent, failed, bounced
+  errorMessage: text("error_message"), // Error details if failed
+  sentAt: text("sent_at"), // ISO timestamp when email was sent
+  deliveredAt: text("delivered_at"), // ISO timestamp when email was delivered
+  openedAt: text("opened_at"), // ISO timestamp when email was opened (if tracking enabled)
+  retryCount: integer("retry_count").default(0),
+  createdAt: text("created_at").notNull().default(sql`now()`),
+});
+
 // Work schedules table - defines business hours for users
 export const workSchedules = pgTable("work_schedules", {
   id: serial("id").primaryKey(),
@@ -629,3 +699,69 @@ export const updateWorkScheduleRuleSchema = createInsertSchema(workScheduleRules
 export type InsertWorkScheduleRule = z.infer<typeof insertWorkScheduleRuleSchema>;
 export type UpdateWorkScheduleRule = z.infer<typeof updateWorkScheduleRuleSchema>;
 export type WorkScheduleRule = typeof workScheduleRules.$inferSelect;
+
+// ===== FOLLOW-UP SYSTEM SCHEMAS =====
+
+// Email Settings schemas
+export const insertEmailSettingsSchema = createInsertSchema(emailSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateEmailSettingsSchema = createInsertSchema(emailSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
+export type InsertEmailSettings = z.infer<typeof insertEmailSettingsSchema>;
+export type UpdateEmailSettings = z.infer<typeof updateEmailSettingsSchema>;
+export type EmailSettings = typeof emailSettings.$inferSelect;
+
+// Follow-up Settings schemas
+export const insertFollowUpSettingsSchema = createInsertSchema(followUpSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateFollowUpSettingsSchema = createInsertSchema(followUpSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
+export type InsertFollowUpSettings = z.infer<typeof insertFollowUpSettingsSchema>;
+export type UpdateFollowUpSettings = z.infer<typeof updateFollowUpSettingsSchema>;
+export type FollowUpSettings = typeof followUpSettings.$inferSelect;
+
+// Follow-up Reports schemas
+export const insertFollowUpReportSchema = createInsertSchema(followUpReports).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const updateFollowUpReportSchema = createInsertSchema(followUpReports).omit({
+  id: true,
+  createdAt: true,
+}).partial();
+
+export type InsertFollowUpReport = z.infer<typeof insertFollowUpReportSchema>;
+export type UpdateFollowUpReport = z.infer<typeof updateFollowUpReportSchema>;
+export type FollowUpReport = typeof followUpReports.$inferSelect;
+
+// Email Logs schemas
+export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const updateEmailLogSchema = createInsertSchema(emailLogs).omit({
+  id: true,
+  createdAt: true,
+}).partial();
+
+export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
+export type UpdateEmailLog = z.infer<typeof updateEmailLogSchema>;
+export type EmailLog = typeof emailLogs.$inferSelect;

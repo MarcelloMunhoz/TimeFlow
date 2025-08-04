@@ -883,7 +883,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update the appointment with the subphase link
       const appointment = await storage.updateAppointment(appointmentId, {
-        projectSubphaseId: projectSubphaseId
+        projectSubphaseId: projectSubphaseId,
+        allowOverlap: false
       });
 
       if (!appointment) {
@@ -906,7 +907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`📊 Manually recalculating progress for project ${projectId}`);
 
       // Use the database function to recalculate all progress
-      await db.execute(`SELECT recalculate_project_progress(?)` as any, [parseInt(projectId)]);
+      await db.execute(`SELECT recalculate_project_progress(${parseInt(projectId)})` as any);
 
       console.log(`✅ Progress recalculated for project ${projectId}`);
       res.json({ message: "Project progress recalculated successfully" });
@@ -1631,6 +1632,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: mainAppointment.date,
         startTime: mainAppointment.endTime,
         durationMinutes: 5,
+        allowOverlap: false,
+        allowWeekendOverride: false,
         isPomodoro: true,
         // Copy assignment fields from main appointment
         projectId: mainAppointment.projectId,
@@ -2850,6 +2853,285 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching available time slots:", error);
       res.status(500).json({ message: "Failed to fetch available time slots" });
+    }
+  });
+
+  // ===== EMAIL SETTINGS ROUTES =====
+
+  // Get email settings
+  app.get("/api/email-settings", async (req, res) => {
+    try {
+      const { emailService } = await import('./services/email-service.js');
+      const settings = await emailService.getSettings();
+
+      if (!settings) {
+        return res.status(404).json({ message: "Email settings not found" });
+      }
+
+      // Don't send password in response
+      const { smtpPassword, ...safeSettings } = settings;
+      res.json(safeSettings);
+    } catch (error) {
+      console.error("Error fetching email settings:", error);
+      res.status(500).json({ message: "Failed to fetch email settings" });
+    }
+  });
+
+  // Update email settings
+  app.put("/api/email-settings", async (req, res) => {
+    try {
+      const { emailService } = await import('./services/email-service.js');
+      await emailService.updateSettings(req.body);
+      res.json({ message: "Email settings updated successfully" });
+    } catch (error) {
+      console.error("Error updating email settings:", error);
+      res.status(500).json({ message: "Failed to update email settings" });
+    }
+  });
+
+  // Test email connection
+  app.post("/api/email-settings/test-connection", async (req, res) => {
+    try {
+      const { emailService } = await import('./services/email-service.js');
+      const result = await emailService.testConnection();
+      res.json(result);
+    } catch (error) {
+      console.error("Error testing email connection:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to test email connection"
+      });
+    }
+  });
+
+  // Send test email
+  app.post("/api/email-settings/send-test", async (req, res) => {
+    try {
+      const { to } = req.body;
+      if (!to) {
+        return res.status(400).json({ message: "Email address is required" });
+      }
+
+      const { emailService } = await import('./services/email-service.js');
+      const result = await emailService.sendTestEmail(to);
+      res.json(result);
+    } catch (error) {
+      console.error("Error sending test email:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to send test email"
+      });
+    }
+  });
+
+  // ===== FOLLOW-UP SETTINGS ROUTES =====
+
+  // Get follow-up settings for a company
+  app.get("/api/follow-up-settings/:companyId", async (req, res) => {
+    try {
+      const { companyId } = req.params;
+      const settings = await storage.getFollowUpSettings(parseInt(companyId));
+
+      if (!settings) {
+        return res.status(404).json({ message: "Follow-up settings not found" });
+      }
+
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching follow-up settings:", error);
+      res.status(500).json({ message: "Failed to fetch follow-up settings" });
+    }
+  });
+
+  // Update follow-up settings for a company
+  app.put("/api/follow-up-settings/:companyId", async (req, res) => {
+    try {
+      const { companyId } = req.params;
+      const settings = await storage.updateFollowUpSettings(parseInt(companyId), req.body);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error updating follow-up settings:", error);
+      res.status(500).json({ message: "Failed to update follow-up settings" });
+    }
+  });
+
+  // Get all companies with follow-up settings
+  app.get("/api/follow-up-settings", async (req, res) => {
+    try {
+      const settings = await storage.getAllFollowUpSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching all follow-up settings:", error);
+      res.status(500).json({ message: "Failed to fetch follow-up settings" });
+    }
+  });
+
+  // ===== FOLLOW-UP REPORTS ROUTES =====
+
+  // Generate follow-up report for a company
+  app.post("/api/follow-up-reports/generate/:companyId", async (req, res) => {
+    try {
+      const { companyId } = req.params;
+      const filters = req.body;
+
+      const { followUpReportService } = await import('./services/follow-up-report-service.js');
+      const result = await followUpReportService.generateReport(parseInt(companyId), filters);
+
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json({ message: result.error });
+      }
+    } catch (error) {
+      console.error("Error generating follow-up report:", error);
+      res.status(500).json({ message: "Failed to generate follow-up report" });
+    }
+  });
+
+  // Get follow-up reports for a company
+  app.get("/api/follow-up-reports/:companyId", async (req, res) => {
+    try {
+      const { companyId } = req.params;
+      const { limit = 10 } = req.query;
+
+      const reports = await storage.getFollowUpReports(parseInt(companyId), parseInt(limit as string));
+      res.json(reports);
+    } catch (error) {
+      console.error("Error fetching follow-up reports:", error);
+      res.status(500).json({ message: "Failed to fetch follow-up reports" });
+    }
+  });
+
+  // Get all follow-up reports
+  app.get("/api/follow-up-reports", async (req, res) => {
+    try {
+      const { limit = 20 } = req.query;
+      const reports = await storage.getFollowUpReports(undefined, parseInt(limit as string));
+      res.json(reports);
+    } catch (error) {
+      console.error("Error fetching all follow-up reports:", error);
+      res.status(500).json({ message: "Failed to fetch follow-up reports" });
+    }
+  });
+
+  // Generate and send follow-up report via email
+  app.post("/api/follow-up-reports/send/:companyId", async (req, res) => {
+    try {
+      const { companyId } = req.params;
+      const filters = req.body;
+
+      // Generate report
+      const { followUpReportService } = await import('./services/follow-up-report-service.js');
+      const reportResult = await followUpReportService.generateReport(parseInt(companyId), filters);
+
+      if (!reportResult.success || !reportResult.reportData) {
+        return res.status(400).json({ message: reportResult.error });
+      }
+
+      // Generate email HTML
+      const { emailTemplateService } = await import('./services/email-template-service.js');
+      const emailHtml = emailTemplateService.generateFollowUpReport(reportResult.reportData);
+
+      // Get company follow-up settings
+      const settings = await storage.getFollowUpSettings(parseInt(companyId));
+      if (!settings || !settings.recipientEmails) {
+        return res.status(400).json({ message: "No email recipients configured for this company" });
+      }
+
+      // Send email
+      const { emailService } = await import('./services/email-service.js');
+      const recipients = JSON.parse(settings.recipientEmails);
+
+      const emailResult = await emailService.sendEmail({
+        to: recipients,
+        subject: `Relatório de Acompanhamento - ${reportResult.reportData.companyName}`,
+        html: emailHtml,
+        reportId: reportResult.reportId
+      });
+
+      if (emailResult.success) {
+        // Update report as sent
+        await storage.updateFollowUpReport(reportResult.reportId!, {
+          emailSent: true,
+          sentAt: new Date().toISOString()
+        });
+
+        res.json({
+          success: true,
+          reportId: reportResult.reportId,
+          emailResult
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: emailResult.error
+        });
+      }
+
+    } catch (error) {
+      console.error("Error sending follow-up report:", error);
+      res.status(500).json({ message: "Failed to send follow-up report" });
+    }
+  });
+
+  // ===== FOLLOW-UP SCHEDULER ROUTES =====
+
+  // Get scheduler status
+  app.get("/api/follow-up-scheduler/status", async (req, res) => {
+    try {
+      const { followUpScheduler } = await import('./services/follow-up-scheduler.js');
+      const status = followUpScheduler.getStatus();
+      res.json(status);
+    } catch (error) {
+      console.error("Error getting scheduler status:", error);
+      res.status(500).json({ message: "Failed to get scheduler status" });
+    }
+  });
+
+  // Reload scheduler jobs
+  app.post("/api/follow-up-scheduler/reload", async (req, res) => {
+    try {
+      const { followUpScheduler } = await import('./services/follow-up-scheduler.js');
+      await followUpScheduler.reloadJobs();
+      res.json({ message: "Scheduler jobs reloaded successfully" });
+    } catch (error) {
+      console.error("Error reloading scheduler jobs:", error);
+      res.status(500).json({ message: "Failed to reload scheduler jobs" });
+    }
+  });
+
+  // Manually trigger follow-up job for a company
+  app.post("/api/follow-up-scheduler/trigger/:companyId", async (req, res) => {
+    try {
+      const { companyId } = req.params;
+      const { followUpScheduler } = await import('./services/follow-up-scheduler.js');
+
+      const result = await followUpScheduler.triggerManualJob(parseInt(companyId));
+
+      if (result.success) {
+        res.json({ message: "Follow-up job triggered successfully" });
+      } else {
+        res.status(400).json({ message: result.error });
+      }
+    } catch (error) {
+      console.error("Error triggering manual follow-up job:", error);
+      res.status(500).json({ message: "Failed to trigger follow-up job" });
+    }
+  });
+
+  // Toggle company job (enable/disable)
+  app.post("/api/follow-up-scheduler/toggle/:companyId", async (req, res) => {
+    try {
+      const { companyId } = req.params;
+      const { enabled } = req.body;
+
+      const { followUpScheduler } = await import('./services/follow-up-scheduler.js');
+      await followUpScheduler.toggleCompanyJob(parseInt(companyId), enabled);
+
+      res.json({ message: `Company job ${enabled ? 'enabled' : 'disabled'} successfully` });
+    } catch (error) {
+      console.error("Error toggling company job:", error);
+      res.status(500).json({ message: "Failed to toggle company job" });
     }
   });
 

@@ -10,7 +10,8 @@ import UsersManagement from "@/components/users-management";
 import PhasesManagement from "@/components/phases-management";
 import SubphasesManagement from "@/components/subphases-management";
 import ProjectKPIsDashboard from "@/components/project-kpis-dashboard";
-import { Building2, FolderOpen, Users, Settings, ArrowLeft, Home, Layers, Layers3, BarChart3 } from "lucide-react";
+import FollowUpDashboard from "@/components/follow-up-dashboard";
+import { Building2, FolderOpen, Users, Settings, ArrowLeft, Home, Layers, Layers3, BarChart3, Mail } from "lucide-react";
 
 export default function ManagementPage() {
   const [activeTab, setActiveTab] = useState("kpis");
@@ -197,7 +198,7 @@ export default function ManagementPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:grid-cols-7">
             <TabsTrigger value="kpis" className="flex items-center space-x-2">
               <BarChart3 className="w-4 h-4" />
               <span>KPIs</span>
@@ -221,6 +222,10 @@ export default function ManagementPage() {
             <TabsTrigger value="subphases" className="flex items-center space-x-2">
               <Layers3 className="w-4 h-4" />
               <span>Subfases</span>
+            </TabsTrigger>
+            <TabsTrigger value="follow-up" className="flex items-center space-x-2">
+              <Mail className="w-4 h-4" />
+              <span>Follow-up</span>
             </TabsTrigger>
           </TabsList>
 
@@ -311,6 +316,10 @@ export default function ManagementPage() {
                 <SubphasesManagement />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="follow-up" className="space-y-6">
+            <FollowUpDashboard />
           </TabsContent>
         </Tabs>
 

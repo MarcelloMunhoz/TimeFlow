@@ -11,7 +11,11 @@ import {
   type CreateRecurringAppointment,
   type WorkSchedule, type InsertWorkSchedule, type UpdateWorkSchedule, workSchedules,
   type WorkScheduleRule, type InsertWorkScheduleRule, type UpdateWorkScheduleRule, workScheduleRules,
-  projectTasks, projectRoadmap
+  projectTasks, projectRoadmap,
+  // Follow-up system imports
+  type FollowUpSettings, type InsertFollowUpSettings, type UpdateFollowUpSettings, followUpSettings,
+  type FollowUpReport, type InsertFollowUpReport, type UpdateFollowUpReport, followUpReports,
+  type EmailLog, type InsertEmailLog, type UpdateEmailLog, emailLogs
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -3553,6 +3557,238 @@ export class DatabaseStorage implements IStorage {
       console.error("❌ BI Methodology seeding failed:", error);
       throw error;
     }
+  }
+
+  async migrateFollowUpSystem(): Promise<void> {
+    try {
+      console.log("🔄 Starting Follow-up System migration...");
+
+      // Create Email Settings table
+      console.log("📝 Creating Email Settings table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS email_settings (
+          id SERIAL PRIMARY KEY,
+          smtp_host TEXT NOT NULL,
+          smtp_port INTEGER NOT NULL DEFAULT 587,
+          smtp_user TEXT NOT NULL,
+          smtp_password TEXT NOT NULL,
+          smtp_secure BOOLEAN DEFAULT false,
+          from_email TEXT NOT NULL,
+          from_name TEXT NOT NULL DEFAULT 'TimeFlow',
+          is_active BOOLEAN DEFAULT true,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      ` as any);
+      console.log("✅ Email Settings table created successfully");
+
+      // Create Follow-up Settings table
+      console.log("📝 Creating Follow-up Settings table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS follow_up_settings (
+          id SERIAL PRIMARY KEY,
+          company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+          enabled BOOLEAN DEFAULT true,
+          email_frequency TEXT NOT NULL DEFAULT 'weekly',
+          send_day INTEGER DEFAULT 1,
+          send_time TEXT DEFAULT '08:00',
+          recipient_emails TEXT,
+          custom_template TEXT,
+          include_blocked_phases BOOLEAN DEFAULT true,
+          include_progress_charts BOOLEAN DEFAULT true,
+          include_next_steps BOOLEAN DEFAULT true,
+          last_sent_date TEXT,
+          is_active BOOLEAN DEFAULT true,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(company_id)
+        )
+      ` as any);
+      console.log("✅ Follow-up Settings table created successfully");
+
+      // Create Follow-up Reports table
+      console.log("📝 Creating Follow-up Reports table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS follow_up_reports (
+          id SERIAL PRIMARY KEY,
+          company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+          report_date TEXT NOT NULL,
+          report_period_start TEXT NOT NULL,
+          report_period_end TEXT NOT NULL,
+          content_json TEXT NOT NULL,
+          html_content TEXT,
+          total_projects INTEGER DEFAULT 0,
+          completed_projects INTEGER DEFAULT 0,
+          projects_at_risk INTEGER DEFAULT 0,
+          overall_progress INTEGER DEFAULT 0,
+          email_sent BOOLEAN DEFAULT false,
+          sent_at TEXT,
+          generated_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      ` as any);
+      console.log("✅ Follow-up Reports table created successfully");
+
+      // Create Email Logs table
+      console.log("📝 Creating Email Logs table...");
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS email_logs (
+          id SERIAL PRIMARY KEY,
+          report_id INTEGER REFERENCES follow_up_reports(id) ON DELETE CASCADE,
+          recipient_email TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          error_message TEXT,
+          sent_at TEXT,
+          delivered_at TEXT,
+          opened_at TEXT,
+          retry_count INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      ` as any);
+      console.log("✅ Email Logs table created successfully");
+
+      // Create indexes for performance
+      console.log("📝 Creating indexes...");
+      const indexQueries = [
+        `CREATE INDEX IF NOT EXISTS idx_follow_up_settings_company_id ON follow_up_settings(company_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_follow_up_settings_enabled ON follow_up_settings(enabled)`,
+        `CREATE INDEX IF NOT EXISTS idx_follow_up_reports_company_id ON follow_up_reports(company_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_follow_up_reports_date ON follow_up_reports(report_date)`,
+        `CREATE INDEX IF NOT EXISTS idx_follow_up_reports_email_sent ON follow_up_reports(email_sent)`,
+        `CREATE INDEX IF NOT EXISTS idx_email_logs_report_id ON email_logs(report_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_email_logs_status ON email_logs(status)`,
+        `CREATE INDEX IF NOT EXISTS idx_email_logs_recipient ON email_logs(recipient_email)`
+      ];
+
+      for (const query of indexQueries) {
+        await db.execute(query as any);
+      }
+      console.log("✅ Indexes created successfully");
+
+      // Insert default email settings
+      console.log("📝 Inserting default email settings...");
+      await db.execute(`
+        INSERT INTO email_settings (
+          smtp_host, smtp_port, smtp_user, smtp_password, from_email, from_name, is_active
+        ) VALUES (
+          'smtp.gmail.com', 587, 'noreply@timeflow.com', 'your_app_password_here',
+          'noreply@timeflow.com', 'TimeFlow - Sistema de Gestão de Projetos', false
+        )
+        ON CONFLICT DO NOTHING
+      ` as any);
+      console.log("✅ Default email settings inserted");
+
+      // Enable follow-up for existing client companies
+      console.log("📝 Enabling follow-up for existing client companies...");
+      await db.execute(`
+        INSERT INTO follow_up_settings (
+          company_id, enabled, email_frequency, send_day, send_time, recipient_emails
+        )
+        SELECT
+          id, true, 'weekly', 1, '08:00',
+          CASE
+            WHEN email IS NOT NULL AND email != '' THEN '["' || email || '"]'
+            ELSE NULL
+          END
+        FROM companies
+        WHERE type = 'client' AND is_active = true
+        ON CONFLICT (company_id) DO NOTHING
+      ` as any);
+      console.log("✅ Follow-up enabled for existing client companies");
+
+      console.log("🎉 Follow-up System migration completed successfully!");
+    } catch (error) {
+      console.error("❌ Follow-up System migration failed:", error);
+      throw error;
+    }
+  }
+
+  // ===== FOLLOW-UP SYSTEM METHODS =====
+
+  async getFollowUpSettings(companyId: number): Promise<any> {
+    const result = await db.select()
+      .from(followUpSettings)
+      .where(eq(followUpSettings.companyId, companyId))
+      .limit(1);
+
+    return result[0] || null;
+  }
+
+  async updateFollowUpSettings(companyId: number, updates: any): Promise<any> {
+    const [updated] = await db.update(followUpSettings)
+      .set({
+        ...updates,
+        updatedAt: new Date().toISOString()
+      })
+      .where(eq(followUpSettings.companyId, companyId))
+      .returning();
+
+    return updated;
+  }
+
+  async getAllFollowUpSettings(): Promise<any[]> {
+    return await db.select({
+      id: followUpSettings.id,
+      companyId: followUpSettings.companyId,
+      companyName: companies.name,
+      enabled: followUpSettings.enabled,
+      emailFrequency: followUpSettings.emailFrequency,
+      sendDay: followUpSettings.sendDay,
+      sendTime: followUpSettings.sendTime,
+      recipientEmails: followUpSettings.recipientEmails,
+      lastSentDate: followUpSettings.lastSentDate,
+      isActive: followUpSettings.isActive
+    })
+    .from(followUpSettings)
+    .leftJoin(companies, eq(followUpSettings.companyId, companies.id))
+    .where(eq(followUpSettings.isActive, true))
+    .orderBy(companies.name);
+  }
+
+  async createFollowUpReport(report: any): Promise<any> {
+    const [created] = await db.insert(followUpReports)
+      .values(report)
+      .returning();
+
+    return created;
+  }
+
+  async getFollowUpReports(companyId?: number, limit: number = 10): Promise<any[]> {
+    let query = db.select({
+      id: followUpReports.id,
+      companyId: followUpReports.companyId,
+      companyName: companies.name,
+      reportDate: followUpReports.reportDate,
+      reportPeriodStart: followUpReports.reportPeriodStart,
+      reportPeriodEnd: followUpReports.reportPeriodEnd,
+      totalProjects: followUpReports.totalProjects,
+      completedProjects: followUpReports.completedProjects,
+      projectsAtRisk: followUpReports.projectsAtRisk,
+      overallProgress: followUpReports.overallProgress,
+      emailSent: followUpReports.emailSent,
+      sentAt: followUpReports.sentAt,
+      createdAt: followUpReports.createdAt
+    })
+      .from(followUpReports)
+      .leftJoin(companies, eq(followUpReports.companyId, companies.id))
+      .orderBy(desc(followUpReports.createdAt))
+      .limit(limit);
+
+    if (companyId) {
+      query = query.where(eq(followUpReports.companyId, companyId)) as any;
+    }
+
+    return await query;
+  }
+
+  async updateFollowUpReport(reportId: number, updates: any): Promise<any> {
+    const [updated] = await db.update(followUpReports)
+      .set(updates)
+      .where(eq(followUpReports.id, reportId))
+      .returning();
+
+    return updated;
   }
 }
 
