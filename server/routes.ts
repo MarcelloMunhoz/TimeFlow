@@ -644,6 +644,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { force } = req.query;
 
+      console.log(`🗑️ DELETE requested for phase ${id}${force === 'true' ? ' (FORCE)' : ''}`);
+
       let success;
       if (force === 'true') {
         console.log(`🗑️ FORCE DELETE requested for phase ${id}`);
@@ -653,12 +655,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!success) {
-        return res.status(404).json({ message: "Phase not found" });
+        console.log(`❌ Phase ${id} not found`);
+        return res.status(404).json({
+          message: "Phase not found",
+          error: "PHASE_NOT_FOUND",
+          phaseId: parseInt(id)
+        });
       }
+
+      console.log(`✅ Phase ${id} deleted successfully`);
       res.json({ message: `Phase ${id} deleted successfully` });
     } catch (error) {
       if (error instanceof Error && error.message.includes("Cannot delete phase")) {
-        return res.status(400).json({ message: error.message });
+        console.log(`⚠️ Cannot delete phase ${id}: ${error.message}`);
+        return res.status(400).json({
+          message: error.message,
+          error: "PHASE_IN_USE",
+          phaseId: parseInt(id)
+        });
       }
       console.error("Error deleting phase:", error);
       res.status(500).json({ message: "Failed to delete phase" });

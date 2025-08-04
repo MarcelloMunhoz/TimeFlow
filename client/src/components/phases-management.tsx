@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DescriptionText } from "@/components/ui/formatted-text";
-import { Trash2, Edit, Plus, Save, X, GripVertical, CheckSquare, Square } from "lucide-react";
+import { Trash2, Edit, Plus, Save, X, GripVertical, CheckSquare, Square, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
@@ -149,6 +149,41 @@ export default function PhasesManagement() {
     onError: (error: any, phaseId: number) => {
       console.error("💥 Frontend: Delete error:", error);
 
+      // Handle specific error cases
+      if (error.message?.includes('404') || error.message?.includes('Phase not found')) {
+        // Phase doesn't exist anymore, just refresh the list
+        queryClient.invalidateQueries({ queryKey: ["/api/phases"] });
+        toast({
+          title: "Fase não encontrada",
+          description: "A fase já foi removida. Atualizando lista...",
+          variant: "default"
+        });
+        return;
+      }
+
+      // Handle phase in use error
+      if (error.message?.includes('Cannot delete phase') || error.message?.includes('assigned to projects')) {
+        const phase = phases?.find((p: any) => p.id === phaseId);
+        if (phase) {
+          const forceConfirmed = confirm(
+            `A fase "${phase.name}" não pode ser excluída porque está sendo usada em projetos.\n\n` +
+            'Deseja forçar a exclusão? Isso removerá a fase de todos os projetos.'
+          );
+
+          if (forceConfirmed) {
+            handleDelete(phase, true);
+            return;
+          }
+        }
+
+        toast({
+          title: "Fase em uso",
+          description: "A fase não pode ser excluída porque está sendo usada em projetos.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       const errorMessage = error?.message || error?.response?.data?.message || "Erro desconhecido";
 
       // Check if error is about phase being assigned to projects
@@ -256,16 +291,48 @@ export default function PhasesManagement() {
     updatePhaseMutation.mutate({ id: editingPhase.id, data: formData });
   };
 
-  const handleDelete = async (phase: Phase) => {
-    // First try normal delete
+  const handleDelete = async (phase: Phase, forceDelete = false) => {
     try {
-      const confirmed = confirm(`Tem certeza que deseja excluir a fase "${phase.name}"?`);
+      const confirmed = confirm(
+        `Tem certeza que deseja excluir a fase "${phase.name}"?${forceDelete ? ' (EXCLUSÃO FORÇADA)' : ''}` +
+        (forceDelete ? '\n\n⚠️ ATENÇÃO: Esta operação removerá a fase mesmo que esteja sendo usada em projetos!' : '')
+      );
       if (!confirmed) return;
 
-      deletePhaseMutation.mutate(phase.id);
+      console.log(`🗑️ Attempting to delete phase ${phase.id}: ${phase.name}${forceDelete ? ' (FORCE)' : ''}`);
+
+      if (forceDelete) {
+        // Use force delete API
+        try {
+          const response = await apiRequest("DELETE", `/api/phases/${phase.id}?force=true`);
+          await response.json();
+
+          toast({ title: "Fase excluída com sucesso!" });
+          queryClient.invalidateQueries({ queryKey: ["/api/phases"] });
+        } catch (error: any) {
+          console.error("Force delete failed:", error);
+          toast({
+            title: "Erro na exclusão forçada",
+            description: error.message || "Não foi possível excluir a fase.",
+            variant: "destructive"
+          });
+        }
+      } else {
+        // Use normal delete mutation
+        deletePhaseMutation.mutate(phase.id);
+      }
     } catch (error) {
-      // If normal delete fails, we'll handle it in the mutation error
+      console.error("Error in handleDelete:", error);
     }
+  };
+
+  const handleRefreshPhases = () => {
+    console.log("🔄 Refreshing phases list...");
+    queryClient.invalidateQueries({ queryKey: ["/api/phases"] });
+    toast({
+      title: "Lista atualizada",
+      description: "A lista de fases foi atualizada com sucesso."
+    });
   };
 
   // Multiple selection functions
@@ -287,43 +354,102 @@ export default function PhasesManagement() {
     }
   };
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = async (forceDelete = false) => {
     if (selectedPhases.size === 0) return;
 
     const selectedPhasesList = phases?.filter((p: Phase) => selectedPhases.has(p.id)) || [];
-    const phaseNames = selectedPhasesList.map(p => p.name).join(', ');
+    const phaseNames = selectedPhasesList.map((p: any) => p.name).join(', ');
 
     const confirmed = confirm(
-      `Tem certeza que deseja excluir ${selectedPhases.size} fase(s)?\n\n` +
-      `Fases selecionadas: ${phaseNames}`
+      `Tem certeza que deseja excluir ${selectedPhases.size} fase(s)?${forceDelete ? ' (EXCLUSÃO FORÇADA)' : ''}\n\n` +
+      `Fases selecionadas: ${phaseNames}` +
+      (forceDelete ? '\n\n⚠️ ATENÇÃO: Esta operação removerá as fases mesmo que estejam sendo usadas em projetos!' : '')
     );
 
     if (!confirmed) return;
 
-    // Delete phases in parallel
-    try {
-      const deletePromises = Array.from(selectedPhases).map(async (phaseId) => {
-        const response = await apiRequest("DELETE", `/api/phases/${phaseId}`);
-        return response.json();
-      });
+    // Track results
+    const results = {
+      successful: [] as number[],
+      failed: [] as { id: number, name: string, error: string }[]
+    };
 
-      await Promise.all(deletePromises);
+    // Delete phases one by one to handle individual errors
+    for (const phaseId of Array.from(selectedPhases)) {
+      try {
+        const phase = selectedPhasesList.find((p: any) => p.id === phaseId);
+        const url = forceDelete ? `/api/phases/${phaseId}?force=true` : `/api/phases/${phaseId}`;
 
+        console.log(`🗑️ Attempting to delete phase ${phaseId}: ${phase?.name}${forceDelete ? ' (FORCE)' : ''}`);
+
+        const response = await apiRequest("DELETE", url);
+        await response.json();
+
+        results.successful.push(phaseId);
+        console.log(`✅ Successfully deleted phase ${phaseId}`);
+
+      } catch (error: any) {
+        console.error(`❌ Failed to delete phase ${phaseId}:`, error);
+        const phase = selectedPhasesList.find((p: any) => p.id === phaseId);
+        results.failed.push({
+          id: phaseId,
+          name: phase?.name || `Fase ${phaseId}`,
+          error: error.message || 'Erro desconhecido'
+        });
+      }
+    }
+
+    // Show results
+    if (results.successful.length > 0) {
       toast({
-        title: "Fases excluídas com sucesso",
-        description: `${selectedPhases.size} fase(s) foram excluídas.`,
+        title: `${results.successful.length} fase(s) excluída(s) com sucesso`,
+        description: results.failed.length > 0 ?
+          `${results.failed.length} fase(s) falharam na exclusão.` :
+          "Todas as fases foram excluídas com sucesso.",
       });
+    }
 
-      queryClient.invalidateQueries({ queryKey: ["/api/phases"] });
-      setSelectedPhases(new Set());
-    } catch (error: any) {
-      console.error("Erro ao excluir fases:", error);
+    if (results.failed.length > 0 && !forceDelete) {
+      // Check if failures are due to phases being in use
+      const inUseErrors = results.failed.filter(f =>
+        f.error.includes('assigned to projects') ||
+        f.error.includes('Cannot delete phase')
+      );
+
+      if (inUseErrors.length > 0) {
+        const forceConfirmed = confirm(
+          `${results.failed.length} fase(s) não puderam ser excluídas porque estão sendo usadas em projetos:\n\n` +
+          results.failed.map(f => `• ${f.name}`).join('\n') +
+          '\n\nDeseja forçar a exclusão? Isso removerá as fases de todos os projetos.'
+        );
+
+        if (forceConfirmed) {
+          // Update selected phases to only include failed ones
+          const failedIds = new Set(results.failed.map(f => f.id));
+          setSelectedPhases(failedIds);
+
+          // Retry with force delete
+          setTimeout(() => handleDeleteSelected(true), 100);
+          return;
+        }
+      } else {
+        toast({
+          title: "Erro ao excluir algumas fases",
+          description: results.failed.map(f => `${f.name}: ${f.error}`).join('\n'),
+          variant: "destructive"
+        });
+      }
+    } else if (results.failed.length > 0 && forceDelete) {
       toast({
-        title: "Erro ao excluir fases",
-        description: error?.message || "Algumas fases podem não ter sido excluídas.",
+        title: "Erro na exclusão forçada",
+        description: `${results.failed.length} fase(s) não puderam ser excluídas mesmo com exclusão forçada.`,
         variant: "destructive"
       });
     }
+
+    // Refresh the list and clear selection
+    queryClient.invalidateQueries({ queryKey: ["/api/phases"] });
+    setSelectedPhases(new Set());
   };
 
   const resetForm = () => {
@@ -552,6 +678,16 @@ export default function PhasesManagement() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <h3 className="text-lg font-medium">Fases do Projeto</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefreshPhases}
+              disabled={isLoading}
+              className="text-xs"
+            >
+              <RefreshCw className={`w-3 h-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+              Atualizar
+            </Button>
             {phases && phases.length > 0 && (
               <div className="flex items-center space-x-2">
                 <Button

@@ -130,16 +130,15 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                 </div>
 
                 {/* Time Slots */}
-                <div className="space-y-2 min-h-[400px] md:min-h-[600px]">
+                <div className="space-y-2 min-h-[500px] md:min-h-[700px]">
                   {/* Morning Slot (08:00 - 12:00) */}
-                  <div className="bg-gray-50 rounded-lg p-3 min-h-[100px] md:min-h-[140px]">
+                  <div className="bg-gray-50 rounded-lg p-3 min-h-[120px] md:min-h-[180px]">
                     <div className="text-xs text-gray-500 font-medium mb-2">08:00</div>
                     {dayAppointments
                       .filter((apt: any) => {
                         const hour = parseInt(apt.startTime.split(':')[0]);
                         return hour >= 8 && hour < 12;
                       })
-                      .slice(0, 3) // Limit to 3 appointments per slot
                       .map((apt: any) => {
                         const status = getStatusForAppointment(apt);
                         return (
@@ -184,18 +183,7 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                           </div>
                         );
                       })}
-                    {/* Show "more" indicator if there are more than 3 appointments */}
-                    {dayAppointments.filter((apt: any) => {
-                      const hour = parseInt(apt.startTime.split(':')[0]);
-                      return hour >= 8 && hour < 12;
-                    }).length > 3 && (
-                      <div className="text-xs text-gray-500 text-center py-1 bg-gray-100 rounded">
-                        +{dayAppointments.filter((apt: any) => {
-                          const hour = parseInt(apt.startTime.split(':')[0]);
-                          return hour >= 8 && hour < 12;
-                        }).length - 3} mais
-                      </div>
-                    )}
+
                   </div>
 
                   {/* Lunch Break (12:00 - 13:00) */}
@@ -205,14 +193,13 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                   </div>
 
                   {/* Afternoon Slot (13:00 - 18:00) */}
-                  <div className="bg-gray-50 rounded-lg p-3 min-h-[120px] md:min-h-[200px]">
+                  <div className="bg-gray-50 rounded-lg p-3 min-h-[150px] md:min-h-[250px]">
                     <div className="text-xs text-gray-500 font-medium mb-2">13:00</div>
                     {dayAppointments
                       .filter((apt: any) => {
                         const hour = parseInt(apt.startTime.split(':')[0]);
                         return hour >= 13 && hour < 18;
                       })
-                      .slice(0, 4) // Limit to 4 appointments per afternoon slot
                       .map((apt: any) => {
                         const status = getStatusForAppointment(apt);
                         return (
@@ -257,29 +244,17 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                           </div>
                         );
                       })}
-                    {/* Show "more" indicator if there are more than 4 appointments */}
-                    {dayAppointments.filter((apt: any) => {
-                      const hour = parseInt(apt.startTime.split(':')[0]);
-                      return hour >= 13 && hour < 18;
-                    }).length > 4 && (
-                      <div className="text-xs text-gray-500 text-center py-1 bg-gray-100 rounded">
-                        +{dayAppointments.filter((apt: any) => {
-                          const hour = parseInt(apt.startTime.split(':')[0]);
-                          return hour >= 13 && hour < 18;
-                        }).length - 4} mais
-                      </div>
-                    )}
+
                   </div>
 
                   {/* After Hours Slot (18:00+) */}
-                  <div className="bg-purple-50 rounded-lg p-3 min-h-[60px] md:min-h-[100px] border border-purple-200">
+                  <div className="bg-purple-50 rounded-lg p-3 min-h-[80px] md:min-h-[120px] border border-purple-200">
                     <div className="text-xs text-purple-600 font-medium mb-2">18:00+</div>
                     {dayAppointments
                       .filter((apt: any) => {
                         const hour = parseInt(apt.startTime.split(':')[0]);
                         return hour >= 18;
                       })
-                      .slice(0, 2) // Limit to 2 appointments per after-hours slot
                       .map((apt: any) => {
                         const status = getStatusForAppointment(apt);
                         return (
@@ -316,18 +291,7 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                           </div>
                         );
                       })}
-                    {/* Show "more" indicator if there are more than 2 appointments */}
-                    {dayAppointments.filter((apt: any) => {
-                      const hour = parseInt(apt.startTime.split(':')[0]);
-                      return hour >= 18;
-                    }).length > 2 && (
-                      <div className="text-xs text-purple-500 text-center py-1 bg-purple-100 rounded">
-                        +{dayAppointments.filter((apt: any) => {
-                          const hour = parseInt(apt.startTime.split(':')[0]);
-                          return hour >= 18;
-                        }).length - 2} mais
-                      </div>
-                    )}
+
                   </div>
                 </div>
               </div>
