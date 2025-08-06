@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { ModernCard, ModernCardContent, ModernCardHeader, ModernCardTitle } from "@/components/ui/modern-card";
-import { ModernButton } from "@/components/ui/modern-button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { Clock, TrendingUp, TrendingDown, AlertCircle, CheckCircle, Timer, ArrowLeft, Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -37,18 +36,7 @@ interface TimeAnalysisSummary {
 export default function TimeAnalysisPage() {
   const [selectedPeriod, setSelectedPeriod] = useState("today");
   const [, setLocation] = useLocation();
-  const { getThemeClasses, isGlassmorphism, designPattern } = useTheme();
-
-  // Usar o mesmo padrão exato da aba de personalização
-  const getCardClasses = () => {
-    if (designPattern === 'neomorphism') {
-      return 'neo-card';
-    } else if (designPattern === 'glassmorphism') {
-      return 'glass-card';
-    } else {
-      return 'bg-theme-secondary border border-theme-border';
-    }
-  };
+  const { getThemeClasses, getCardClasses, getButtonClasses } = useTheme();
 
   const { data: appointments = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/appointments'],
@@ -168,16 +156,16 @@ export default function TimeAnalysisPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <ModernButton
-              variant="outline"
+            <button
               onClick={() => setLocation('/')}
-              icon={<ArrowLeft className="w-4 h-4" />}
+              className={`${getButtonClasses('outline')} flex items-center gap-2`}
             >
+              <ArrowLeft className="w-4 h-4" />
               Voltar
-            </ModernButton>
+            </button>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Análise de Tempo Detalhada</h1>
-              <p className="text-gray-600">
+              <h1 className="text-3xl font-bold text-theme-primary">Análise de Tempo Detalhada</h1>
+              <p className="text-theme-secondary">
                 Comparação completa entre tempo estimado e tempo realmente trabalhado
               </p>
             </div>
@@ -318,10 +306,10 @@ export default function TimeAnalysisPage() {
           </CardHeader>
           <CardContent>
             {tasks.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-12 text-theme-secondary">
                 <Clock className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium mb-2">Nenhuma tarefa encontrada</p>
-                <p>Não há tarefas concluídas no período selecionado para análise</p>
+                <p className="text-lg font-medium mb-2 text-theme-primary">Nenhuma tarefa encontrada</p>
+                <p className="text-theme-secondary">Não há tarefas concluídas no período selecionado para análise</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -329,7 +317,7 @@ export default function TimeAnalysisPage() {
                   <div key={task.taskId} className="border border-theme-border rounded-lg p-4 hover:bg-theme-tertiary transition-all duration-300 ease-in-out hover:shadow-md hover:-translate-y-0.5">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <h4 className="font-medium text-gray-900 mb-1">{task.title}</h4>
+                        <h4 className="font-medium text-theme-primary mb-1">{task.title}</h4>
                         <div className="flex gap-2 mb-2">
                           <Badge variant="outline" className="text-xs">
                             {task.date}
@@ -356,27 +344,27 @@ export default function TimeAnalysisPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                       <div>
-                        <p className="text-gray-600 mb-1">Estimado</p>
-                        <p className="font-medium text-blue-600">{formatTime(task.estimatedMinutes)}</p>
+                        <p className="text-theme-secondary mb-1">Estimado</p>
+                        <p className="font-medium text-accent-blue">{formatTime(task.estimatedMinutes)}</p>
                       </div>
                       <div>
-                        <p className="text-gray-600 mb-1">Real</p>
-                        <p className="font-medium text-green-600">{formatTime(task.actualMinutes)}</p>
+                        <p className="text-theme-secondary mb-1">Real</p>
+                        <p className="font-medium text-accent-green">{formatTime(task.actualMinutes)}</p>
                       </div>
                       <div>
-                        <p className="text-gray-600 mb-1">Diferença</p>
-                        <p className={`font-medium ${task.difference > 0 ? 'text-red-600' : task.difference < 0 ? 'text-purple-600' : 'text-gray-600'}`}>
+                        <p className="text-theme-secondary mb-1">Diferença</p>
+                        <p className={`font-medium ${task.difference > 0 ? 'text-accent-red' : task.difference < 0 ? 'text-accent-purple' : 'text-theme-secondary'}`}>
                           {formatDifference(task.difference)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-gray-600 mb-1">Precisão</p>
+                        <p className="text-theme-secondary mb-1">Precisão</p>
                         <div className="flex items-center gap-2">
-                          <Progress 
-                            value={Math.max(0, 100 - Math.abs(task.differencePercentage))} 
+                          <Progress
+                            value={Math.max(0, 100 - Math.abs(task.differencePercentage))}
                             className="flex-1 h-2"
                           />
-                          <span className="text-xs font-medium">
+                          <span className="text-xs font-medium text-theme-primary">
                             {Math.max(0, 100 - Math.abs(task.differencePercentage))}%
                           </span>
                         </div>

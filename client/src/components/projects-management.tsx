@@ -84,6 +84,7 @@ export default function ProjectsManagement() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isPhasesModalOpen, setIsPhasesModalOpen] = useState(false);
   const [selectedProjectForPhases, setSelectedProjectForPhases] = useState<Project | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "paused" | "cancelled">("all");
   const [formData, setFormData] = useState<ProjectFormData>({
     name: "",
     description: "",
@@ -336,6 +337,21 @@ export default function ProjectsManagement() {
     return Math.min((actualHoursConverted / project.estimatedHours) * 100, 100);
   };
 
+  // Filter projects based on status
+  const filteredProjects = (projects as Project[]).filter(project => {
+    if (statusFilter === "all") return true;
+    return project.status === statusFilter;
+  });
+
+  // Get project counts for filter badges
+  const projectCounts = {
+    all: (projects as Project[]).length,
+    active: (projects as Project[]).filter(p => p.status === 'active').length,
+    completed: (projects as Project[]).filter(p => p.status === 'completed').length,
+    paused: (projects as Project[]).filter(p => p.status === 'paused').length,
+    cancelled: (projects as Project[]).filter(p => p.status === 'cancelled').length,
+  };
+
   // Handle update all progress
   const handleUpdateAllProgress = () => {
     console.log("🔘 Update progress button clicked");
@@ -381,6 +397,74 @@ export default function ProjectsManagement() {
         </div>
 
       </div>
+
+      {/* Status Filter */}
+      <Card className="neo-card">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <FolderOpen className="w-5 h-5 text-blue-600" />
+              Filtrar Projetos
+            </h3>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setStatusFilter("all")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out ${
+                  statusFilter === "all"
+                    ? "neo-inset bg-blue-50 text-blue-700"
+                    : "neo-elevated hover:neo-inset text-gray-600 hover:text-blue-600"
+                }`}
+              >
+                Todos ({projectCounts.all})
+              </button>
+              <button
+                onClick={() => setStatusFilter("active")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out ${
+                  statusFilter === "active"
+                    ? "neo-inset bg-green-50 text-green-700"
+                    : "neo-elevated hover:neo-inset text-gray-600 hover:text-green-600"
+                }`}
+              >
+                Ativos ({projectCounts.active})
+              </button>
+              <button
+                onClick={() => setStatusFilter("completed")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out ${
+                  statusFilter === "completed"
+                    ? "neo-inset bg-emerald-50 text-emerald-700"
+                    : "neo-elevated hover:neo-inset text-gray-600 hover:text-emerald-600"
+                }`}
+              >
+                Concluídos ({projectCounts.completed})
+              </button>
+              {projectCounts.paused > 0 && (
+                <button
+                  onClick={() => setStatusFilter("paused")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out ${
+                    statusFilter === "paused"
+                      ? "neo-inset bg-yellow-50 text-yellow-700"
+                      : "neo-elevated hover:neo-inset text-gray-600 hover:text-yellow-600"
+                  }`}
+                >
+                  Pausados ({projectCounts.paused})
+                </button>
+              )}
+              {projectCounts.cancelled > 0 && (
+                <button
+                  onClick={() => setStatusFilter("cancelled")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out ${
+                    statusFilter === "cancelled"
+                      ? "neo-inset bg-red-50 text-red-700"
+                      : "neo-elevated hover:neo-inset text-gray-600 hover:text-red-600"
+                  }`}
+                >
+                  Cancelados ({projectCounts.cancelled})
+                </button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Custom Modal */}
       <CustomModal
@@ -536,7 +620,7 @@ export default function ProjectsManagement() {
       </CustomModal>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(projects as Project[]).map((project: Project) => (
+        {filteredProjects.map((project: Project) => (
           <Card key={project.id} className="hover:shadow-md transition-all duration-300 ease-in-out hover:-translate-y-0.5">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
@@ -620,7 +704,7 @@ export default function ProjectsManagement() {
         ))}
       </div>
 
-      {(projects as Project[]).length === 0 && (
+      {filteredProjects.length === 0 && (projects as Project[]).length === 0 && (
         <div className="text-center py-12">
           <FolderOpen className="w-12 h-12 text-theme-muted mx-auto mb-4" />
           <h3 className="text-lg font-medium text-theme-primary mb-2">Nenhum projeto cadastrado</h3>
@@ -632,6 +716,33 @@ export default function ProjectsManagement() {
             <Plus className="w-4 h-4" />
             Criar Primeiro Projeto
           </button>
+        </div>
+      )}
+
+      {filteredProjects.length === 0 && (projects as Project[]).length > 0 && (
+        <div className="text-center py-12">
+          <FolderOpen className="w-12 h-12 text-theme-muted mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-theme-primary mb-2">
+            Nenhum projeto {statusFilter === "all" ? "" : statusLabels[statusFilter].toLowerCase()}
+          </h3>
+          <p className="text-theme-secondary mb-4">
+            Tente alterar o filtro ou criar um novo projeto
+          </p>
+          <div className="flex justify-center space-x-2">
+            <button
+              onClick={() => setStatusFilter("all")}
+              className={`${getButtonClasses('outline')} flex items-center gap-2`}
+            >
+              Ver Todos os Projetos
+            </button>
+            <button
+              onClick={handleNewProject}
+              className={`${getButtonClasses('primary')} flex items-center gap-2`}
+            >
+              <Plus className="w-4 h-4" />
+              Novo Projeto
+            </button>
+          </div>
         </div>
       )}
 

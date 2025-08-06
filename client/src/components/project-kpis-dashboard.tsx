@@ -414,7 +414,6 @@ export default function ProjectKPIsDashboard() {
               {/* Chart */}
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={kpis.phaseEfficiency} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis
                     dataKey="phaseName"
                     angle={-45}
@@ -487,7 +486,6 @@ export default function ProjectKPIsDashboard() {
               {/* Chart */}
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={kpis.monthlyTrend} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis
                     dataKey="displayMonth"
                     fontSize={12}
@@ -664,75 +662,116 @@ export default function ProjectKPIsDashboard() {
       </div>
 
       {/* Performance Indicators */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Performance Geral */}
+        <Card className="neo-card">
+          <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center">
-              <TrendingUp className="w-5 h-5 mr-2 text-green-600" />
+              <div className="p-2 rounded-lg neo-inset mr-3">
+                <TrendingUp className="w-5 h-5 text-green-600" />
+              </div>
               Performance Geral
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm">Taxa de Sucesso:</span>
-                <Badge variant={kpis.onTimeCompletionRate >= 80 ? "default" : "destructive"}>
-                  {kpis.onTimeCompletionRate.toFixed(1)}%
-                </Badge>
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg neo-inset bg-gradient-to-r from-green-50 to-emerald-50">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">Taxa de Sucesso:</span>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded-full ${kpis.onTimeCompletionRate >= 80 ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className={`font-bold text-lg ${kpis.onTimeCompletionRate >= 80 ? 'text-green-600' : 'text-red-600'}`}>
+                      {kpis.onTimeCompletionRate.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm">Eficiência:</span>
-                <Badge variant={kpis.averageProgressPercentage >= 70 ? "default" : "secondary"}>
-                  {kpis.averageProgressPercentage.toFixed(1)}%
-                </Badge>
+              <div className="p-3 rounded-lg neo-inset bg-gradient-to-r from-blue-50 to-cyan-50">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">Eficiência:</span>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded-full ${kpis.averageProgressPercentage >= 70 ? 'bg-blue-500' : 'bg-yellow-500'}`}></div>
+                    <span className={`font-bold text-lg ${kpis.averageProgressPercentage >= 70 ? 'text-blue-600' : 'text-yellow-600'}`}>
+                      {kpis.averageProgressPercentage.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
+        {/* Gestão de Tempo */}
+        <Card className="neo-card">
+          <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center">
-              <Clock className="w-5 h-5 mr-2 text-blue-600" />
+              <div className="p-2 rounded-lg neo-inset mr-3">
+                <Clock className="w-5 h-5 text-blue-600" />
+              </div>
               Gestão de Tempo
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm">Tempo Médio:</span>
-                <span className="font-semibold">{kpis.averageExecutionTime.toFixed(0)} dias</span>
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg neo-inset bg-gradient-to-r from-blue-50 to-indigo-50">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">Tempo Médio:</span>
+                  <div className="flex items-center space-x-2">
+                    <Clock className="w-4 h-4 text-blue-500" />
+                    <span className="font-bold text-lg text-blue-600">
+                      {kpis.averageExecutionTime.toFixed(0)} dias
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm">No Prazo:</span>
-                <Badge variant={kpis.onTimeCompletionRate >= 80 ? "default" : "destructive"}>
-                  {kpis.onTimeCompletionRate.toFixed(1)}%
-                </Badge>
+              <div className="p-3 rounded-lg neo-inset bg-gradient-to-r from-emerald-50 to-green-50">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">No Prazo:</span>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded-full ${kpis.onTimeCompletionRate >= 80 ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className={`font-bold text-lg ${kpis.onTimeCompletionRate >= 80 ? 'text-green-600' : 'text-red-600'}`}>
+                      {kpis.onTimeCompletionRate.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
+        {/* Gestão de Riscos */}
+        <Card className="neo-card">
+          <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center">
-              <AlertTriangle className="w-5 h-5 mr-2 text-orange-600" />
+              <div className="p-2 rounded-lg neo-inset mr-3">
+                <AlertTriangle className="w-5 h-5 text-orange-600" />
+              </div>
               Gestão de Riscos
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm">Projetos em Risco:</span>
-                <Badge variant={kpis.projectsAtRisk === 0 ? "default" : "destructive"}>
-                  {kpis.projectsAtRisk}
-                </Badge>
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg neo-inset bg-gradient-to-r from-orange-50 to-amber-50">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">Projetos em Risco:</span>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded-full ${kpis.projectsAtRisk === 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className={`font-bold text-lg ${kpis.projectsAtRisk === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {kpis.projectsAtRisk}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm">Taxa de Risco:</span>
-                <span className="font-semibold">
-                  {kpis.totalProjects > 0 ? ((kpis.projectsAtRisk / kpis.totalProjects) * 100).toFixed(1) : 0}%
-                </span>
+              <div className="p-3 rounded-lg neo-inset bg-gradient-to-r from-red-50 to-pink-50">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">Taxa de Risco:</span>
+                  <div className="flex items-center space-x-2">
+                    <AlertTriangle className="w-4 h-4 text-orange-500" />
+                    <span className="font-bold text-lg text-orange-600">
+                      {kpis.totalProjects > 0 ? ((kpis.projectsAtRisk / kpis.totalProjects) * 100).toFixed(1) : 0}%
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>

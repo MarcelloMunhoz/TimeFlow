@@ -1,7 +1,8 @@
 // Removed ModernCard imports - using direct CSS classes like personalization tab
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, Clock, AlertTriangle, TrendingUp, BarChart3, Target, Zap } from "lucide-react";
+import { CheckCircle, Clock, AlertTriangle, TrendingUp, BarChart3, Target, Zap, ArrowRight } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
+import { useLocation } from "wouter";
 
 interface ProductivityStats {
   todayCompleted: number;
@@ -15,6 +16,7 @@ interface ProductivityStats {
 
 export default function ProductivityMetrics() {
   const { designPattern } = useTheme();
+  const [, setLocation] = useLocation();
 
   const { data: stats, isLoading } = useQuery<ProductivityStats>({
     queryKey: ['/api/stats/productivity'],
@@ -33,6 +35,45 @@ export default function ProductivityMetrics() {
       return 'glass-card';
     }
     return 'bg-theme-secondary border border-gray-200 shadow-sm';
+  };
+
+  const getButtonClasses = (variant: 'primary' | 'outline' | 'ghost' = 'primary') => {
+    const baseClasses = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent-blue focus:ring-offset-2';
+
+    if (designPattern === 'neomorphism') {
+      switch (variant) {
+        case 'primary':
+          return `${baseClasses} neo-button text-accent-blue hover:text-white hover:bg-accent-blue px-4 py-2`;
+        case 'outline':
+          return `${baseClasses} neo-button border border-theme-muted text-theme-primary px-4 py-2`;
+        case 'ghost':
+          return `${baseClasses} neo-inset text-theme-primary hover:text-accent-blue px-4 py-2`;
+        default:
+          return `${baseClasses} neo-button px-4 py-2`;
+      }
+    } else if (designPattern === 'glassmorphism') {
+      switch (variant) {
+        case 'primary':
+          return `${baseClasses} glass text-white bg-accent-blue/80 hover:bg-accent-blue border border-accent-blue/30 px-4 py-2`;
+        case 'outline':
+          return `${baseClasses} glass text-theme-primary bg-transparent hover:bg-theme-secondary/30 border border-theme-muted/50 px-4 py-2`;
+        case 'ghost':
+          return `${baseClasses} text-theme-primary hover:bg-theme-secondary/30 backdrop-blur-sm px-4 py-2`;
+        default:
+          return `${baseClasses} glass px-4 py-2`;
+      }
+    } else {
+      switch (variant) {
+        case 'primary':
+          return `${baseClasses} bg-accent-blue text-white hover:bg-blue-600 shadow-sm px-4 py-2`;
+        case 'outline':
+          return `${baseClasses} border border-gray-300 text-theme-primary hover:bg-gray-50 px-4 py-2`;
+        case 'ghost':
+          return `${baseClasses} text-theme-primary hover:bg-gray-100 px-4 py-2`;
+        default:
+          return `${baseClasses} bg-accent-blue text-white hover:bg-blue-600 px-4 py-2`;
+      }
+    }
   };
 
   // Calculate next task
@@ -73,11 +114,21 @@ export default function ProductivityMetrics() {
   return (
     <div className="mb-8">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-theme-primary mb-2">Resumo de Produtividade</h2>
-        <p className="text-theme-secondary">
-          Acompanhe seu desempenho diário e métricas de produtividade em tempo real
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-theme-primary mb-2">Resumo de Produtividade</h2>
+          <p className="text-theme-secondary">
+            Acompanhe seu desempenho diário e métricas de produtividade em tempo real
+          </p>
+        </div>
+        <button
+          onClick={() => setLocation('/time-analysis')}
+          className={`${getButtonClasses('outline')} flex items-center gap-2 px-3 py-1 text-sm`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          Análise de Tempo
+          <ArrowRight className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Main Metrics Cards */}
