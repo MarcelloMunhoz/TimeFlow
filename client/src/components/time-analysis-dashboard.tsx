@@ -167,30 +167,7 @@ export default function TimeAnalysisDashboard() {
         </div>
       </div>
 
-      {/* Quick Summary */}
-      {summary.totalTasks > 0 && (
-        <div className={`${getCardClasses()} p-4 rounded-lg transition-all duration-300 ease-in-out hover:shadow-lg hover:-translate-y-1`}>
-          <div className="flex items-center justify-between">
-            <div className="grid grid-cols-3 gap-6 flex-1">
-              <div className="text-center">
-                <p className="text-xl font-bold text-theme-primary">{summary.tasksOverEstimate}</p>
-                <p className="text-xs text-theme-secondary">Acima do estimado</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-theme-primary">{summary.tasksOnTime}</p>
-                <p className="text-xs text-theme-secondary">No tempo certo</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-theme-primary">{summary.tasksUnderEstimate}</p>
-                <p className="text-xs text-theme-secondary">Abaixo do estimado</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-theme-tertiary">Clique em "Ver Detalhes" para análise completa</p>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

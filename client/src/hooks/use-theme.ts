@@ -62,9 +62,6 @@ export function useTheme() {
       // Salvar no localStorage
       localStorage.setItem(THEME_STORAGE_KEY, theme);
       localStorage.setItem(DESIGN_PATTERN_STORAGE_KEY, designPattern);
-
-      // Debug log
-      console.log(`🎨 Tema aplicado: ${theme}, Padrão: ${designPattern}`);
     }
   }, [theme, designPattern]);
 

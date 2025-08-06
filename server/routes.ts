@@ -1644,12 +1644,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/appointments/:id/pomodoro", async (req, res) => {
     try {
       const { id } = req.params;
+      console.log(`🍅 Creating Pomodoro for appointment ${id}`);
 
       // Get the main appointment
       const mainAppointment = await storage.getAppointment(id);
       if (!mainAppointment) {
+        console.error(`❌ Appointment ${id} not found`);
         return res.status(404).json({ message: "Appointment not found" });
       }
+
+      console.log(`📋 Main appointment found:`, {
+        id: mainAppointment.id,
+        title: mainAppointment.title,
+        date: mainAppointment.date,
+        endTime: mainAppointment.endTime
+      });
 
       // Create Pomodoro break
       const pomodoroData = {
@@ -1658,25 +1667,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: mainAppointment.date,
         startTime: mainAppointment.endTime,
         durationMinutes: 5,
-        allowOverlap: false,
-        allowWeekendOverride: false,
+        allowOverlap: true, // Allow overlap for Pomodoro breaks
+        allowWeekendOverride: true, // Allow weekend override for Pomodoro breaks
         isPomodoro: true,
-        // Copy assignment fields from main appointment
-        projectId: mainAppointment.projectId,
-        companyId: mainAppointment.companyId,
-        assignedUserId: mainAppointment.assignedUserId,
-        phaseId: mainAppointment.phaseId,
-        // Copy work schedule compliance
-        isWithinWorkHours: mainAppointment.isWithinWorkHours,
-        isOvertime: mainAppointment.isOvertime,
-        workScheduleViolation: mainAppointment.workScheduleViolation,
+        status: "scheduled" as const,
+        // Copy assignment fields from main appointment (optional fields)
+        projectId: mainAppointment.projectId || null,
+        companyId: mainAppointment.companyId || null,
+        assignedUserId: mainAppointment.assignedUserId || null,
+        phaseId: mainAppointment.phaseId || null,
+        // Copy work schedule compliance (optional fields)
+        isWithinWorkHours: mainAppointment.isWithinWorkHours || false,
+        isOvertime: mainAppointment.isOvertime || false,
+        workScheduleViolation: mainAppointment.workScheduleViolation || null,
       };
 
+      console.log(`🍅 Creating Pomodoro with data:`, pomodoroData);
+
       const pomodoro = await storage.createAppointment(pomodoroData);
+      console.log(`✅ Pomodoro created successfully:`, pomodoro.id);
+
       res.status(201).json(pomodoro);
     } catch (error) {
-      console.error("Error creating Pomodoro:", error);
-      res.status(500).json({ message: "Failed to create Pomodoro break" });
+      console.error("❌ Error creating Pomodoro:", error);
+      res.status(500).json({
+        message: "Failed to create Pomodoro break",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 

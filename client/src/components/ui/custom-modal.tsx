@@ -11,7 +11,7 @@ interface CustomModalProps {
 }
 
 export function CustomModal({ isOpen, onClose, title, children, className = "" }: CustomModalProps) {
-  // Handle escape key
+  // Handle escape key and body scroll (optimized)
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -21,13 +21,19 @@ export function CustomModal({ isOpen, onClose, title, children, className = "" }
 
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
-      // Prevent body scroll
-      document.body.style.overflow = 'hidden';
+      // Prevent body scroll only if not already set
+      if (document.body.style.overflow !== 'hidden') {
+        document.body.style.overflow = 'hidden';
+      }
+
+      return () => {
+        document.removeEventListener('keydown', handleEscape);
+        document.body.style.overflow = 'unset';
+      };
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
     };
   }, [isOpen, onClose]);
 

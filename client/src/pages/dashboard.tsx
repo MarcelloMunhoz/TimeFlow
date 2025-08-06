@@ -6,6 +6,7 @@ import ProductivityMetrics from "@/components/productivity-metrics";
 import CalendarView from "@/components/calendar-view";
 import TaskList from "@/components/task-list";
 import AppointmentForm from "@/components/appointment-form";
+import TimeAnalysisDashboard from "@/components/time-analysis-dashboard";
 
 import ThemeController from "@/components/theme-controller";
 import { getTodayString } from "@/lib/date-utils";
@@ -190,6 +191,9 @@ export default function Dashboard() {
         <main className={`p-6 ${designPattern === 'glassmorphism' ? 'backdrop-blur-sm' : ''}`}>
           {/* Productivity Metrics */}
           <ProductivityMetrics />
+
+          {/* Time Analysis Dashboard */}
+          <TimeAnalysisDashboard />
 
           {/* View Toggle and Search */}
           <div className="flex items-center justify-between mb-6">
