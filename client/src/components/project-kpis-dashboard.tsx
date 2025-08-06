@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
+import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Area, AreaChart
 } from 'recharts';
-import { 
-  TrendingUp, TrendingDown, Clock, AlertTriangle, CheckCircle, 
+import {
+  TrendingUp, TrendingDown, Clock, AlertTriangle, CheckCircle,
   Target, Calendar, Users, BarChart3, RefreshCw, Download
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
@@ -25,8 +25,22 @@ interface KPIData {
   averageExecutionTime: number;
   projectsAtRisk: number;
   averageProgressPercentage: number;
-  phaseEfficiency: Array<{ phaseName: string; averageDuration: number; plannedDuration: number }>;
-  monthlyTrend: Array<{ month: string; completed: number; started: number }>;
+  phaseEfficiency: Array<{
+    phaseName: string;
+    averageDuration: number;
+    plannedDuration: number;
+    efficiency: number;
+    completedCount: number;
+    totalCount: number;
+  }>;
+  monthlyTrend: Array<{
+    month: string;
+    displayMonth: string;
+    completed: number;
+    started: number;
+    active: number;
+    completionRate: number;
+  }>;
 }
 
 interface Filters {
@@ -46,6 +60,27 @@ export default function ProjectKPIsDashboard() {
     status: 'all'
   });
   const { toast } = useToast();
+  const scrollPositionRef = useRef<number>(0);
+
+  // Preserve scroll position when filters change
+  useEffect(() => {
+    const handleScroll = () => {
+      scrollPositionRef.current = window.scrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Restore scroll position after data updates
+  useEffect(() => {
+    if (scrollPositionRef.current > 0) {
+      const timer = setTimeout(() => {
+        window.scrollTo({ top: scrollPositionRef.current, behavior: 'auto' });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [filters]);
 
   // Fetch KPIs data
   const { data: kpis, isLoading, refetch } = useQuery<KPIData>({
@@ -72,10 +107,14 @@ export default function ProjectKPIsDashboard() {
   });
 
   const handleFilterChange = (key: keyof Filters, value: string) => {
+    // Store current scroll position before filter change
+    scrollPositionRef.current = window.scrollY;
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
   const clearFilters = () => {
+    // Store current scroll position before clearing filters
+    scrollPositionRef.current = window.scrollY;
     setFilters({
       startDate: '',
       endDate: '',
@@ -275,21 +314,33 @@ export default function ProjectKPIsDashboard() {
           <CardContent>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm">Projetos Atrasados:</span>
-                <Badge variant="destructive">
+                <span className="text-sm">🚨 Projetos em Risco:</span>
+                <Badge variant={kpis.projectsAtRisk > 0 ? "destructive" : "default"}>
                   {kpis.projectsAtRisk}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">Taxa de Sucesso:</span>
-                <Badge variant={kpis.onTimeCompletionRate >= 80 ? "default" : "secondary"}>
+                <span className="text-sm">✅ Taxa de Sucesso:</span>
+                <Badge variant={kpis.onTimeCompletionRate >= 80 ? "default" : kpis.onTimeCompletionRate >= 60 ? "secondary" : "destructive"}>
                   {kpis.onTimeCompletionRate.toFixed(1)}%
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">Progresso Médio:</span>
-                <span className="font-semibold">
+                <span className="text-sm">📊 Progresso Médio:</span>
+                <Badge variant={kpis.averageProgressPercentage >= 70 ? "default" : kpis.averageProgressPercentage >= 50 ? "secondary" : "destructive"}>
                   {kpis.averageProgressPercentage.toFixed(1)}%
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">⏱️ Tempo Médio:</span>
+                <span className="font-semibold text-sm">
+                  {kpis.averageExecutionTime.toFixed(0)} dias
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">📈 Projetos Ativos:</span>
+                <span className="font-semibold text-sm">
+                  {activeProjects}
                 </span>
               </div>
             </div>
@@ -342,16 +393,63 @@ export default function ProjectKPIsDashboard() {
             <CardDescription>Tempo real vs. planejado por fase do projeto</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={kpis.phaseEfficiency}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="phaseName" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="plannedDuration" fill="#8884d8" name="Planejado (dias)" />
-                <Bar dataKey="averageDuration" fill="#82ca9d" name="Real (dias)" />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="space-y-4">
+              {/* Efficiency Summary */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {kpis.phaseEfficiency.length > 0 ?
+                      Math.round(kpis.phaseEfficiency.reduce((acc, phase) => acc + phase.efficiency, 0) / kpis.phaseEfficiency.length) : 0}%
+                  </div>
+                  <div className="text-sm text-muted-foreground">Eficiência Média</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {kpis.phaseEfficiency.reduce((acc, phase) => acc + phase.completedCount, 0)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Fases Concluídas</div>
+                </div>
+              </div>
+
+              {/* Chart */}
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={kpis.phaseEfficiency} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis
+                    dataKey="phaseName"
+                    angle={-45}
+                    textAnchor="end"
+                    height={80}
+                    fontSize={12}
+                  />
+                  <YAxis label={{ value: 'Dias', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip
+                    formatter={(value, name, props) => [
+                      `${value} dias`,
+                      name === 'plannedDuration' ? 'Planejado' : 'Real'
+                    ]}
+                    labelFormatter={(label) => `Fase: ${label}`}
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-white p-3 border rounded shadow-lg">
+                            <p className="font-semibold">{label}</p>
+                            <p className="text-blue-600">Planejado: {data.plannedDuration} dias</p>
+                            <p className="text-green-600">Real: {data.averageDuration} dias</p>
+                            <p className="text-purple-600">Eficiência: {data.efficiency}%</p>
+                            <p className="text-gray-600">Concluídas: {data.completedCount}/{data.totalCount}</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar dataKey="plannedDuration" fill="#3b82f6" name="Planejado" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="averageDuration" fill="#10b981" name="Real" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
 
@@ -359,56 +457,208 @@ export default function ProjectKPIsDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Tendência Mensal</CardTitle>
-            <CardDescription>Projetos iniciados vs. concluídos por mês</CardDescription>
+            <CardDescription>Projetos iniciados vs. concluídos por mês (últimos 6 meses)</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={kpis.monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="started" stroke="#8884d8" name="Iniciados" />
-                <Line type="monotone" dataKey="completed" stroke="#82ca9d" name="Concluídos" />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="space-y-4">
+              {/* Trend Summary */}
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {kpis.monthlyTrend.reduce((acc, month) => acc + month.started, 0)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Total Iniciados</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {kpis.monthlyTrend.reduce((acc, month) => acc + month.completed, 0)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Total Concluídos</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {kpis.monthlyTrend.length > 0 ?
+                      Math.round(kpis.monthlyTrend.reduce((acc, month) => acc + month.completionRate, 0) / kpis.monthlyTrend.length) : 0}%
+                  </div>
+                  <div className="text-sm text-muted-foreground">Taxa Média</div>
+                </div>
+              </div>
+
+              {/* Chart */}
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={kpis.monthlyTrend} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis
+                    dataKey="displayMonth"
+                    fontSize={12}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis label={{ value: 'Projetos', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-white p-3 border rounded shadow-lg">
+                            <p className="font-semibold">{label}</p>
+                            <p className="text-blue-600">Iniciados: {data.started}</p>
+                            <p className="text-green-600">Concluídos: {data.completed}</p>
+                            <p className="text-orange-600">Ativos: {data.active}</p>
+                            <p className="text-purple-600">Taxa de Conclusão: {data.completionRate}%</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="started"
+                    stroke="#3b82f6"
+                    strokeWidth={3}
+                    dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
+                    name="Iniciados"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="completed"
+                    stroke="#10b981"
+                    strokeWidth={3}
+                    dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
+                    name="Concluídos"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="active"
+                    stroke="#f59e0b"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={{ fill: '#f59e0b', strokeWidth: 2, r: 3 }}
+                    name="Ativos"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
 
         {/* Project Status Distribution */}
-        <Card>
+        <Card className="neo-card">
           <CardHeader>
             <CardTitle>Distribuição de Status</CardTitle>
             <CardDescription>Proporção de projetos por status</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Concluídos', value: kpis.completedProjects, color: '#00C49F' },
-                    { name: 'Ativos', value: activeProjects, color: '#0088FE' },
-                    { name: 'Em Risco', value: kpis.projectsAtRisk, color: '#FF8042' }
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {[
-                    { name: 'Concluídos', value: kpis.completedProjects, color: '#00C49F' },
-                    { name: 'Ativos', value: activeProjects, color: '#0088FE' },
-                    { name: 'Em Risco', value: kpis.projectsAtRisk, color: '#FF8042' }
-                  ].map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="space-y-4">
+              {/* Status Summary */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="text-center p-3 rounded-lg neo-inset">
+                  <div className="text-2xl font-bold text-green-600">
+                    {kpis.completedProjects}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Concluídos</div>
+                  <div className="text-xs text-green-600 font-medium">
+                    {kpis.totalProjects > 0 ? Math.round((kpis.completedProjects / kpis.totalProjects) * 100) : 0}%
+                  </div>
+                </div>
+                <div className="text-center p-3 rounded-lg neo-inset">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {activeProjects}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Ativos</div>
+                  <div className="text-xs text-blue-600 font-medium">
+                    {kpis.totalProjects > 0 ? Math.round((activeProjects / kpis.totalProjects) * 100) : 0}%
+                  </div>
+                </div>
+                <div className="text-center p-3 rounded-lg neo-inset">
+                  <div className="text-2xl font-bold text-orange-600">
+                    {kpis.projectsAtRisk}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Em Risco</div>
+                  <div className="text-xs text-orange-600 font-medium">
+                    {kpis.totalProjects > 0 ? Math.round((kpis.projectsAtRisk / kpis.totalProjects) * 100) : 0}%
+                  </div>
+                </div>
+              </div>
+
+              {/* Neomorphic Pie Chart Container */}
+              <div className="relative p-6 rounded-2xl neo-inset bg-gradient-to-br from-gray-50 to-gray-100">
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <defs>
+                      <filter id="neo-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feDropShadow dx="2" dy="2" stdDeviation="3" floodColor="#00000020"/>
+                        <feDropShadow dx="-2" dy="-2" stdDeviation="3" floodColor="#ffffff80"/>
+                      </filter>
+                    </defs>
+                    <Pie
+                      data={[
+                        {
+                          name: 'Concluídos',
+                          value: kpis.completedProjects,
+                          color: '#10b981',
+                          percentage: kpis.totalProjects > 0 ? Math.round((kpis.completedProjects / kpis.totalProjects) * 100) : 0
+                        },
+                        {
+                          name: 'Ativos',
+                          value: activeProjects,
+                          color: '#3b82f6',
+                          percentage: kpis.totalProjects > 0 ? Math.round((activeProjects / kpis.totalProjects) * 100) : 0
+                        },
+                        {
+                          name: 'Em Risco',
+                          value: kpis.projectsAtRisk,
+                          color: '#f59e0b',
+                          percentage: kpis.totalProjects > 0 ? Math.round((kpis.projectsAtRisk / kpis.totalProjects) * 100) : 0
+                        }
+                      ].filter(item => item.value > 0)} // Only show segments with data
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percentage }) => `${name} ${percentage}%`}
+                      outerRadius={90}
+                      innerRadius={30}
+                      fill="#8884d8"
+                      dataKey="value"
+                      stroke="#ffffff"
+                      strokeWidth={3}
+                    >
+                      {[
+                        { name: 'Concluídos', value: kpis.completedProjects, color: '#10b981' },
+                        { name: 'Ativos', value: activeProjects, color: '#3b82f6' },
+                        { name: 'Em Risco', value: kpis.projectsAtRisk, color: '#f59e0b' }
+                      ].filter(item => item.value > 0).map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={entry.color}
+                          filter="url(#neo-shadow)"
+                          style={{
+                            filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.1)) drop-shadow(-1px -1px 2px rgba(255,255,255,0.8))'
+                          }}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white p-3 border rounded-lg shadow-lg neo-card">
+                              <p className="font-semibold">{data.name}</p>
+                              <p className="text-sm">Quantidade: {data.value}</p>
+                              <p className="text-sm">Percentual: {data.percentage}%</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

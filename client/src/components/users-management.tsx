@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Button } from "@/components/ui/button";
+// Removed Button import - using pattern-aware buttons
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useTheme } from "@/hooks/use-theme";
 import { Users, Plus, Edit, Trash2, Mail, Phone, Building2, Briefcase } from "lucide-react";
 import { z } from "zod";
 
@@ -61,6 +62,7 @@ export default function UsersManagement() {
   const [filterType, setFilterType] = useState<"all" | "internal" | "external">("all");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { getCardClasses, getButtonClasses } = useTheme();
 
   // Suppress DOM errors while this component is mounted
   useEffect(() => {
@@ -255,10 +257,13 @@ export default function UsersManagement() {
               <SelectItem value="external">Externos</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={handleNewUser} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-2" />
+          <button
+            onClick={handleNewUser}
+            className={`${getButtonClasses('primary')} flex items-center gap-2`}
+          >
+            <Plus className="w-4 h-4" />
             Novo Usuário
-          </Button>
+          </button>
         </div>
 
         <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
@@ -404,19 +409,20 @@ export default function UsersManagement() {
                   />
 
                   <div className="flex justify-end space-x-2 pt-4">
-                    <Button
+                    <button
                       type="button"
-                      variant="outline"
                       onClick={() => setIsDialogOpen(false)}
+                      className={`${getButtonClasses('outline')} flex items-center justify-center`}
                     >
                       Cancelar
-                    </Button>
-                    <Button
+                    </button>
+                    <button
                       type="submit"
                       disabled={createUserMutation.isPending || updateUserMutation.isPending}
+                      className={`${getButtonClasses('primary')} flex items-center justify-center`}
                     >
                       {editingUser ? "Atualizar" : "Criar"}
-                    </Button>
+                    </button>
                   </div>
                 </form>
               </Form>
@@ -426,7 +432,7 @@ export default function UsersManagement() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredUsers.map((user: User) => (
-          <Card key={user.id} className="hover:shadow-md transition-shadow">
+          <Card key={user.id} className="hover:shadow-md transition-all duration-300 ease-in-out hover:-translate-y-0.5">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-3">
@@ -482,21 +488,18 @@ export default function UsersManagement() {
               )}
 
               <div className="flex justify-end space-x-2 pt-2">
-                <Button
-                  size="sm"
-                  variant="outline"
+                <button
                   onClick={() => handleEdit(user)}
+                  className={`${getButtonClasses('outline')} px-3 py-1 text-sm flex items-center justify-center`}
                 >
                   <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
+                </button>
+                <button
                   onClick={() => handleDelete(user.id)}
-                  className="text-red-600 hover:text-red-700"
+                  className={`${getButtonClasses('outline')} px-3 py-1 text-sm flex items-center justify-center text-red-600 hover:text-red-700 transition-all duration-300 ease-in-out`}
                 >
                   <Trash2 className="w-4 h-4" />
-                </Button>
+                </button>
               </div>
             </CardContent>
           </Card>
@@ -505,15 +508,18 @@ export default function UsersManagement() {
 
       {filteredUsers.length === 0 && (
         <div className="text-center py-12">
-          <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
+          <Users className="w-12 h-12 text-theme-muted mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-theme-primary mb-2">
             {filterType === "all" ? "Nenhum usuário cadastrado" : `Nenhum usuário ${filterType === "internal" ? "interno" : "externo"} cadastrado`}
           </h3>
-          <p className="text-gray-600 mb-4">Comece criando seu primeiro usuário</p>
-          <Button onClick={handleNewUser} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-2" />
+          <p className="text-theme-secondary mb-4">Comece criando seu primeiro usuário</p>
+          <button
+            onClick={handleNewUser}
+            className={`${getButtonClasses('primary')} flex items-center gap-2`}
+          >
+            <Plus className="w-4 h-4" />
             Criar Primeiro Usuário
-          </Button>
+          </button>
         </div>
       )}
     </div>

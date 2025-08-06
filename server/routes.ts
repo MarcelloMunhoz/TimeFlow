@@ -125,6 +125,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Populate missing project dates
+  app.post("/api/projects/populate-dates", async (req, res) => {
+    try {
+      console.log("📅 Populating missing project dates...");
+      await storage.autoPopulateProjectDates();
+      res.json({ message: "Project dates populated successfully" });
+    } catch (error) {
+      console.error("💥 Error populating project dates:", error);
+      res.status(500).json({ message: "Failed to populate project dates" });
+    }
+  });
+
   // Get project management KPIs
   app.get("/api/projects/kpis", async (req, res) => {
     try {

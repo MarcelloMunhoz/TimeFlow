@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+// Removed ModernCard imports - using direct CSS classes like personalization tab
+// Removed Button import - using pattern-aware buttons
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import TimerControls from "./timer-controls";
 import AppointmentStatusFilter, { StatusFilter, TimeFilter } from "@/components/appointment-status-filter";
 import { useAppointmentFilters } from "@/hooks/use-appointment-filters";
 import AppointmentOverlapIndicator, { useAppointmentOverlaps } from "@/components/appointment-overlap-indicator";
+import { useTheme } from "@/hooks/use-theme";
 
 interface TaskListProps {
   selectedDate: string;
@@ -70,6 +71,17 @@ export default function TaskList({
   console.log('TaskList - selectedDate:', selectedDate);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  // Usar o mesmo padrão exato da aba de personalização
+  const { designPattern, getButtonClasses } = useTheme();
+  const getCardClasses = () => {
+    if (designPattern === 'neomorphism') {
+      return 'neo-card';
+    }
+    if (designPattern === 'glassmorphism') {
+      return 'glass-card';
+    }
+    return 'bg-theme-secondary border border-gray-200 shadow-sm';
+  };
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
@@ -296,21 +308,19 @@ export default function TaskList({
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Carregando...</CardTitle>
-        </CardHeader>
-      </Card>
+      <div className={`${getCardClasses()} p-6 rounded-lg`}>
+        <div className="text-lg font-semibold text-theme-primary">Carregando...</div>
+      </div>
     );
   }
 
   return (
-    <Card key={`task-list-${selectedDate}-${forceRender}`}>
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold text-gray-900">
+    <div key={`task-list-${selectedDate}-${forceRender}`} className={`${getCardClasses()} rounded-lg transition-all duration-300 hover:shadow-lg hover:-translate-y-1`}>
+      <div className="p-6 border-b border-theme-muted">
+        <h3 className="text-lg font-semibold text-theme-primary">
           Agendamentos
-        </CardTitle>
-      </CardHeader>
+        </h3>
+      </div>
 
       {showStatusFilter && (
         <div className="px-6 pb-4">
@@ -324,7 +334,7 @@ export default function TaskList({
         </div>
       )}
 
-      <CardContent className="space-y-3">
+      <div className="p-6 space-y-3">
         {appointments.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             {currentStatusFilter === 'all' && 'Nenhum agendamento encontrado'}
@@ -428,10 +438,8 @@ export default function TaskList({
                       
                       <div className="flex space-x-1">
                         {appointment.status !== 'completed' && !appointment.isPomodoro && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="p-1 h-6 w-6"
+                          <button
+                            className={`${getButtonClasses('ghost')} p-1 h-6 w-6 flex items-center justify-center`}
                             onClick={() => {
                               console.log("Marcando como concluído:", appointment.id);
                               completeTaskMutation.mutate(appointment.id);
@@ -440,36 +448,30 @@ export default function TaskList({
                             title="Marcar como concluído"
                           >
                             <Check className="w-3 h-3 text-green-600" />
-                          </Button>
+                          </button>
                         )}
-                        
+
                         {appointment.status === 'scheduled' && !appointment.isPomodoro && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="p-1 h-6 w-6"
+                          <button
+                            className={`${getButtonClasses('ghost')} p-1 h-6 w-6 flex items-center justify-center`}
                             onClick={() => handleReschedule(appointment)}
                             disabled={rescheduleTaskMutation.isPending}
                             title="Reagendar"
                           >
-                            <Clock className="w-3 h-3 text-gray-600" />
-                          </Button>
+                            <Clock className="w-3 h-3 text-theme-secondary" />
+                          </button>
                         )}
-                        
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="p-1 h-6 w-6"
+
+                        <button
+                          className={`${getButtonClasses('ghost')} p-1 h-6 w-6 flex items-center justify-center`}
                           onClick={() => handleEdit(appointment)}
                           title="Editar"
                         >
-                          <Edit className="w-3 h-3 text-gray-600" />
-                        </Button>
+                          <Edit className="w-3 h-3 text-theme-secondary" />
+                        </button>
                         
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="p-1 h-6 w-6"
+                        <button
+                          className={`${getButtonClasses('ghost')} p-1 h-6 w-6 flex items-center justify-center`}
                           onClick={() => {
                             console.log(`🗑️ User clicked delete for appointment: ${appointment.id} - "${appointment.title}"`);
 
@@ -524,7 +526,7 @@ export default function TaskList({
                           title="Excluir tarefa"
                         >
                           <Trash2 className={`w-3 h-3 ${deleteTaskMutation.isPending ? 'text-gray-400' : 'text-red-500'}`} />
-                        </Button>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -568,7 +570,7 @@ export default function TaskList({
             );
           })
         )}
-      </CardContent>
+      </div>
       
       {/* Reschedule Modal */}
       <Dialog open={showRescheduleModal} onOpenChange={setShowRescheduleModal}>
@@ -596,15 +598,19 @@ export default function TaskList({
               />
             </div>
             <div className="flex space-x-2 pt-4">
-              <Button variant="outline" onClick={() => setShowRescheduleModal(false)}>
+              <button
+                className={`${getButtonClasses('outline')} flex items-center justify-center`}
+                onClick={() => setShowRescheduleModal(false)}
+              >
                 Cancelar
-              </Button>
-              <Button 
+              </button>
+              <button
+                className={`${getButtonClasses('primary')} flex items-center justify-center`}
                 onClick={confirmReschedule}
                 disabled={rescheduleTaskMutation.isPending || !rescheduleDate || !rescheduleTime}
               >
                 {rescheduleTaskMutation.isPending ? "Reagendando..." : "Confirmar"}
-              </Button>
+              </button>
             </div>
           </div>
         </DialogContent>
@@ -619,6 +625,6 @@ export default function TaskList({
           editingAppointment={selectedAppointment}
         />
       )}
-    </Card>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Button } from "@/components/ui/button";
+// Removed Button import - using pattern-aware buttons
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { CardDescriptionText } from "@/components/ui/formatted-text";
 import { useToast } from "@/hooks/use-toast";
 import { CustomModal } from "@/components/ui/custom-modal";
+import { useTheme } from "@/hooks/use-theme";
 import { Building2, Plus, Edit, Trash2, Mail, Phone, Globe, FolderOpen, ChevronDown, ChevronUp } from "lucide-react";
 
 interface CompanyFormData {
@@ -61,6 +62,7 @@ export default function CompaniesManagement() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { getCardClasses, getButtonClasses } = useTheme();
 
   // Reset form
   const resetForm = () => {
@@ -273,13 +275,16 @@ export default function CompaniesManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Gerenciar Empresas</h2>
-          <p className="text-gray-600">Gerencie empresas internas e clientes</p>
+          <h2 className="text-2xl font-bold text-theme-primary">Gerenciar Empresas</h2>
+          <p className="text-theme-secondary">Gerencie empresas internas e clientes</p>
         </div>
-        <Button onClick={handleNewCompany} className="bg-blue-600 hover:bg-blue-700">
-          <Plus className="w-4 h-4 mr-2" />
+        <button
+          onClick={handleNewCompany}
+          className={`${getButtonClasses('primary')} flex items-center gap-2`}
+        >
+          <Plus className="w-4 h-4" />
           Nova Empresa
-        </Button>
+        </button>
       </div>
 
       {/* Custom Modal */}
@@ -369,19 +374,20 @@ export default function CompaniesManagement() {
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
-            <Button
+            <button
               type="button"
-              variant="outline"
               onClick={handleModalClose}
+              className={`${getButtonClasses('outline')} flex items-center justify-center`}
             >
               Cancelar
-            </Button>
-            <Button
+            </button>
+            <button
               type="submit"
               disabled={createCompanyMutation.isPending || updateCompanyMutation.isPending}
+              className={`${getButtonClasses('primary')} flex items-center justify-center`}
             >
               {editingCompany ? "Atualizar" : "Criar"}
-            </Button>
+            </button>
           </div>
         </form>
       </CustomModal>
@@ -392,7 +398,7 @@ export default function CompaniesManagement() {
           const isExpanded = expandedCompanies.has(company.id);
 
           return (
-            <Card key={company.id} className="hover:shadow-md transition-shadow">
+            <Card key={company.id} className="hover:shadow-md transition-all duration-300 ease-in-out hover:-translate-y-0.5">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-2">
@@ -418,18 +424,16 @@ export default function CompaniesManagement() {
                     </span>
                   </div>
                   {companyProjects.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                    <button
                       onClick={() => toggleCompanyExpansion(company.id)}
-                      className="h-6 px-2"
+                      className={`${getButtonClasses('ghost')} h-6 px-2 flex items-center justify-center`}
                     >
                       {isExpanded ? (
                         <ChevronUp className="w-4 h-4" />
                       ) : (
                         <ChevronDown className="w-4 h-4" />
                       )}
-                    </Button>
+                    </button>
                   )}
                 </div>
               </CardHeader>
@@ -493,7 +497,7 @@ export default function CompaniesManagement() {
               {company.website && (
                 <div className="flex items-center space-x-2 text-sm text-gray-600">
                   <Globe className="w-4 h-4" />
-                  <a href={company.website} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                  <a href={company.website} target="_blank" rel="noopener noreferrer" className="hover:underline transition-all duration-300 ease-in-out hover:text-theme-accent">
                     {company.website}
                   </a>
                 </div>
@@ -501,23 +505,20 @@ export default function CompaniesManagement() {
 
               {/* Action Buttons */}
               <div className="flex justify-end space-x-2 pt-2">
-                <Button
-                  size="sm"
-                  variant="outline"
+                <button
                   onClick={() => handleEdit(company)}
                   title="Editar empresa"
+                  className={`${getButtonClasses('outline')} px-3 py-1 text-sm flex items-center justify-center`}
                 >
                   <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
+                </button>
+                <button
                   onClick={() => handleDelete(company.id)}
-                  className="text-red-600 hover:text-red-700"
                   title="Excluir empresa"
+                  className={`${getButtonClasses('outline')} px-3 py-1 text-sm flex items-center justify-center text-red-600 hover:text-red-700 transition-all duration-300 ease-in-out`}
                 >
                   <Trash2 className="w-4 h-4" />
-                </Button>
+                </button>
               </div>
             </CardContent>
           </Card>
@@ -527,13 +528,16 @@ export default function CompaniesManagement() {
 
       {(companies as Company[]).length === 0 && (
         <div className="text-center py-12">
-          <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma empresa cadastrada</h3>
-          <p className="text-gray-600 mb-4">Comece criando sua primeira empresa</p>
-          <Button onClick={handleNewCompany} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-2" />
+          <Building2 className="w-12 h-12 text-theme-muted mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-theme-primary mb-2">Nenhuma empresa cadastrada</h3>
+          <p className="text-theme-secondary mb-4">Comece criando sua primeira empresa</p>
+          <button
+            onClick={handleNewCompany}
+            className={`${getButtonClasses('primary')} flex items-center gap-2`}
+          >
+            <Plus className="w-4 h-4" />
             Criar Primeira Empresa
-          </Button>
+          </button>
         </div>
       )}
     </div>

@@ -1,20 +1,24 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+// Removed Button import - using pattern-aware buttons
 import { Input } from "@/components/ui/input";
 import { CalendarCheck, Plus, Search, Download, List, Calendar as CalendarIcon, User, Settings, TrendingUp, AlertTriangle, Target, Clock } from "lucide-react";
 import ProductivityMetrics from "@/components/productivity-metrics";
 import CalendarView from "@/components/calendar-view";
 import TaskList from "@/components/task-list";
 import AppointmentForm from "@/components/appointment-form";
+import TimeAnalysisDashboard from "@/components/time-analysis-dashboard";
+import ThemeController from "@/components/theme-controller";
 import { getTodayString } from "@/lib/date-utils";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useTheme } from "@/hooks/use-theme";
 
 type ViewMode = "week" | "day";
 
 // Project Status Card Component
 function ProjectStatusCard() {
+  const { getCardClasses } = useTheme();
   const { data: projects } = useQuery({
     queryKey: ["/api/projects"],
     queryFn: async () => {
@@ -31,39 +35,39 @@ function ProjectStatusCard() {
   });
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-        <TrendingUp className="w-5 h-5 mr-2 text-blue-600" />
+    <div className={`${getCardClasses()} p-6`}>
+      <h3 className="text-lg font-semibold text-theme-primary mb-4 flex items-center">
+        <TrendingUp className="w-5 h-5 mr-2 text-accent-blue" />
         Status dos Projetos
       </h3>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">Projetos Ativos</span>
-          <span className="text-lg font-semibold text-blue-600">{activeProjects.length}</span>
+          <span className="text-sm text-theme-secondary">Projetos Ativos</span>
+          <span className="text-lg font-semibold text-accent-blue">{activeProjects.length}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">Concluídos</span>
-          <span className="text-lg font-semibold text-green-600">{completedProjects.length}</span>
+          <span className="text-sm text-theme-secondary">Concluídos</span>
+          <span className="text-lg font-semibold text-accent-green">{completedProjects.length}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600 flex items-center">
-            <AlertTriangle className="w-4 h-4 mr-1 text-orange-500" />
+          <span className="text-sm text-theme-secondary flex items-center">
+            <AlertTriangle className="w-4 h-4 mr-1 text-accent-orange" />
             Em Risco
           </span>
-          <span className="text-lg font-semibold text-orange-600">{atRiskProjects.length}</span>
+          <span className="text-lg font-semibold text-accent-orange">{atRiskProjects.length}</span>
         </div>
         {activeProjects.length > 0 && (
-          <div className="pt-2 border-t">
-            <div className="text-xs text-gray-500 mb-2">Progresso Médio</div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="pt-2 border-t border-theme-muted">
+            <div className="text-xs text-theme-muted mb-2">Progresso Médio</div>
+            <div className="w-full bg-theme-tertiary rounded-full h-2">
               <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                className="bg-accent-blue h-2 rounded-full transition-all duration-300 ease-in-out"
                 style={{
                   width: `${Math.max(0, Math.min(100, activeProjects.reduce((acc: number, p: any) => acc + (p.progressPercentage || 0), 0) / activeProjects.length))}%`
                 }}
               />
             </div>
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="text-xs text-theme-muted mt-1">
               {Math.round(activeProjects.reduce((acc: number, p: any) => acc + (p.progressPercentage || 0), 0) / activeProjects.length)}% concluído
             </div>
           </div>
@@ -75,37 +79,38 @@ function ProjectStatusCard() {
 
 // Quick Actions Card Component
 function QuickActionsCard() {
+  const { getCardClasses, getButtonClasses } = useTheme();
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-        <Target className="w-5 h-5 mr-2 text-green-600" />
+    <div className={`${getCardClasses()} p-6`}>
+      <h3 className="text-lg font-semibold text-theme-primary mb-4 flex items-center">
+        <Target className="w-5 h-5 mr-2 text-accent-green" />
         Ações Rápidas
       </h3>
       <div className="space-y-3">
         <Link href="/management">
-          <Button variant="outline" className="w-full justify-start">
-            <Plus className="w-4 h-4 mr-2" />
+          <button className={`${getButtonClasses('outline')} w-full justify-start flex items-center gap-2`}>
+            <Plus className="w-4 h-4" />
             Novo Projeto BI
-          </Button>
+          </button>
         </Link>
         <Link href="/management">
-          <Button variant="outline" className="w-full justify-start">
-            <TrendingUp className="w-4 h-4 mr-2" />
+          <button className={`${getButtonClasses('outline')} w-full justify-start flex items-center gap-2`}>
+            <TrendingUp className="w-4 h-4" />
             Ver KPIs
-          </Button>
+          </button>
         </Link>
         <Link href="/management">
-          <Button variant="outline" className="w-full justify-start">
-            <Settings className="w-4 h-4 mr-2" />
+          <button className={`${getButtonClasses('outline')} w-full justify-start flex items-center gap-2`}>
+            <Settings className="w-4 h-4" />
             Configurações
-          </Button>
+          </button>
         </Link>
-        <div className="pt-2 border-t">
-          <div className="text-xs text-gray-500 mb-2 flex items-center">
+        <div className="pt-2 border-t border-theme-muted">
+          <div className="text-xs text-theme-muted mb-2 flex items-center">
             <Clock className="w-3 h-3 mr-1" />
             Próximos Prazos
           </div>
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-theme-secondary">
             Verifique os prazos das fases em andamento
           </div>
         </div>
@@ -119,33 +124,62 @@ export default function Dashboard() {
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
+  const { getThemeClasses, getCardClasses, getButtonClasses, designPattern } = useTheme();
 
+
+  // Usar o mesmo padrão exato da aba de personalização
+  const getBackgroundClasses = () => {
+    const base = 'min-h-screen transition-all duration-300 ease-in-out';
+    if (designPattern === 'glassmorphism') {
+      return `${base} bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-blue-900 dark:to-purple-900`;
+    }
+    if (designPattern === 'neomorphism') {
+      return `${base} ${getThemeClasses().join(' ')}`;
+    }
+    return `${base} ${getThemeClasses().join(' ')}`;
+  };
+
+  const getHeaderClasses = () => {
+    const base = 'fixed w-full top-0 z-40';
+    if (designPattern === 'neomorphism') {
+      return `neo-card shadow-lg border-b border-theme-muted ${base}`;
+    }
+    if (designPattern === 'glassmorphism') {
+      return `glass-card shadow-lg border-b border-white/20 ${base}`;
+    }
+    return `bg-theme-secondary shadow-sm border-b border-theme-muted ${base}`;
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={getBackgroundClasses()}>
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200 fixed w-full top-0 z-40">
+      <header className={getHeaderClasses()}>
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center space-x-4">
-            <CalendarCheck className="text-blue-600 text-2xl w-8 h-8" />
-            <h1 className="text-xl font-semibold text-gray-900">TimeFlow - Gestão de Projetos BI</h1>
+            <CalendarCheck className="text-accent-blue text-2xl w-8 h-8" />
+            <h1 className="text-xl font-semibold text-theme-primary">TimeFlow - Gestão de Projetos BI</h1>
           </div>
           <div className="flex items-center space-x-4">
+            <ThemeController />
             <Link href="/management">
-              <Button variant="outline" className="border-gray-300 hover:bg-gray-50">
-                <Settings className="w-4 h-4 mr-2" />
+              <button className={`${getButtonClasses('outline')} flex items-center gap-2`}>
+                <Settings className="w-4 h-4" />
                 Gerenciar
-              </Button>
+              </button>
             </Link>
-            <Button
+            <button
               onClick={() => setShowAppointmentForm(true)}
-              className="bg-blue-600 hover:bg-blue-700"
+              className={`${getButtonClasses('primary')} flex items-center gap-2`}
             >
-              <Plus className="w-4 h-4 mr-2" />
+              <Plus className="w-4 h-4" />
               Novo Agendamento
-            </Button>
-            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-              <User className="w-4 h-4 text-gray-600" />
+            </button>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+              designPattern === 'neomorphism' ? 'neo-card' :
+              designPattern === 'glassmorphism' ? 'glass' :
+              'bg-theme-tertiary'
+            }`}>
+              <User className="w-4 h-4 text-theme-primary" />
             </div>
           </div>
         </div>
@@ -153,54 +187,49 @@ export default function Dashboard() {
 
       <div className="pt-16">
         {/* Main Content */}
-        <main className="p-6">
+        <main className={`p-6 ${designPattern === 'glassmorphism' ? 'backdrop-blur-sm' : ''}`}>
           {/* Productivity Metrics */}
           <ProductivityMetrics />
+
+          {/* Time Analysis Dashboard */}
+          <TimeAnalysisDashboard />
 
           {/* View Toggle and Search */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
               {/* Calendar/List Toggle */}
-              <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
-                <Button
-                  variant={view === 'calendar' ? 'default' : 'ghost'}
-                  size="sm"
+              <div className="flex items-center space-x-1 bg-theme-tertiary rounded-lg p-1">
+                <button
                   onClick={() => setView('calendar')}
-                  className={view === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : ''}
+                  className={`${getButtonClasses(view === 'calendar' ? 'primary' : 'ghost')} px-3 py-1 text-sm flex items-center gap-2 ${view === 'calendar' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
                 >
-                  <CalendarIcon className="w-4 h-4 mr-2" />
+                  <CalendarIcon className="w-4 h-4" />
                   Calendário
-                </Button>
-                <Button
-                  variant={view === 'list' ? 'default' : 'ghost'}
-                  size="sm"
+                </button>
+                <button
                   onClick={() => setView('list')}
-                  className={view === 'list' ? 'bg-white text-blue-600 shadow-sm' : ''}
+                  className={`${getButtonClasses(view === 'list' ? 'primary' : 'ghost')} px-3 py-1 text-sm flex items-center gap-2 ${view === 'list' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
                 >
-                  <List className="w-4 h-4 mr-2" />
+                  <List className="w-4 h-4" />
                   Lista
-                </Button>
+                </button>
               </div>
 
               {/* View Mode Toggle (only show when calendar view is active) */}
               {view === 'calendar' && (
-                <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
-                  <Button
-                    variant={viewMode === 'week' ? 'default' : 'ghost'}
-                    size="sm"
+                <div className="flex items-center space-x-1 bg-theme-tertiary rounded-lg p-1">
+                  <button
                     onClick={() => setViewMode('week')}
-                    className={viewMode === 'week' ? 'bg-white text-yellow-600 shadow-sm' : ''}
+                    className={`${getButtonClasses(viewMode === 'week' ? 'primary' : 'ghost')} px-3 py-1 text-sm ${viewMode === 'week' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
                   >
                     Semana
-                  </Button>
-                  <Button
-                    variant={viewMode === 'day' ? 'default' : 'ghost'}
-                    size="sm"
+                  </button>
+                  <button
                     onClick={() => setViewMode('day')}
-                    className={viewMode === 'day' ? 'bg-white text-yellow-600 shadow-sm' : ''}
+                    className={`${getButtonClasses(viewMode === 'day' ? 'primary' : 'ghost')} px-3 py-1 text-sm ${viewMode === 'day' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
                   >
                     Dia
-                  </Button>
+                  </button>
                 </div>
               )}
             </div>
@@ -213,10 +242,10 @@ export default function Dashboard() {
                   className="pl-10 w-80"
                 />
               </div>
-              <Button variant="outline">
-                <Download className="w-4 h-4 mr-2" />
+              <button className={`${getButtonClasses('outline')} flex items-center gap-2`}>
+                <Download className="w-4 h-4" />
                 Exportar
-              </Button>
+              </button>
             </div>
           </div>
 
@@ -248,12 +277,12 @@ export default function Dashboard() {
       </div>
 
       {/* Floating Action Button */}
-      <Button
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg hover:scale-105 transition-all bg-blue-600 hover:bg-blue-700"
+      <button
+        className={`fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg hover:scale-105 transition-all duration-300 ease-in-out ${getButtonClasses('primary')} flex items-center justify-center`}
         onClick={() => setShowAppointmentForm(true)}
       >
         <Plus className="w-6 h-6" />
-      </Button>
+      </button>
 
       {/* Appointment Form Modal */}
       <AppointmentForm

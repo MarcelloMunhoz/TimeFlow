@@ -213,11 +213,11 @@ Sistema de Gestão de Projetos BI
         ) : reportData ? (
           <div className="space-y-6">
             {/* Header */}
-            <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-6 rounded-lg">
-              <h2 className="text-2xl font-bold text-blue-900 mb-2">
+            <div className="bg-theme-secondary p-6 rounded-lg border border-theme-border">
+              <h2 className="text-2xl font-bold text-theme-primary mb-2">
                 {reportData.companyName}
               </h2>
-              <div className="flex items-center space-x-4 text-blue-700">
+              <div className="flex items-center space-x-4 text-theme-secondary">
                 <div className="flex items-center">
                   <Calendar className="w-4 h-4 mr-1" />
                   <span>Período: {formatDate(reportData.reportPeriodStart)} a {formatDate(reportData.reportPeriodEnd)}</span>

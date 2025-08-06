@@ -143,7 +143,27 @@ export default function ProjectNotifications({
             </div>
           </div>
           <CardDescription>
-            Última verificação: {formatLastCheck(lastCheck)}
+            {totalNotifications > 0 ? (
+              <div className="flex items-center space-x-4 text-sm">
+                {getNotificationsBySeverity('high').length > 0 && (
+                  <span className="text-red-600 font-medium">
+                    🚨 {getNotificationsBySeverity('high').length} urgente{getNotificationsBySeverity('high').length > 1 ? 's' : ''}
+                  </span>
+                )}
+                {getNotificationsBySeverity('medium').length > 0 && (
+                  <span className="text-orange-600 font-medium">
+                    ⚠️ {getNotificationsBySeverity('medium').length} média{getNotificationsBySeverity('medium').length > 1 ? 's' : ''}
+                  </span>
+                )}
+                {getNotificationsBySeverity('low').length > 0 && (
+                  <span className="text-blue-600 font-medium">
+                    ℹ️ {getNotificationsBySeverity('low').length} baixa{getNotificationsBySeverity('low').length > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+            ) : (
+              `Última verificação: ${formatLastCheck(lastCheck)}`
+            )}
           </CardDescription>
         </CardHeader>
       )}
@@ -190,9 +210,15 @@ export default function ProjectNotifications({
                             <Badge variant={getSeverityColor(notification.severity)} className="text-xs">
                               {getSeverityText(notification.severity)}
                             </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {notification.type === 'overdue' && '🚨 Atrasado'}
+                              {notification.type === 'deadline_risk' && '⚠️ Risco de Atraso'}
+                              {notification.type === 'progress_slow' && '📉 Progresso Lento'}
+                              {notification.type === 'phase_delayed' && '⏰ Fase Atrasada'}
+                            </Badge>
                             {notification.daysRemaining !== undefined && (
-                              <span className="text-xs text-red-600">
-                                {notification.daysRemaining > 0 
+                              <span className="text-xs text-red-600 font-medium">
+                                {notification.daysRemaining > 0
                                   ? `${notification.daysRemaining} dias restantes`
                                   : `${Math.abs(notification.daysRemaining)} dias atrasado`
                                 }
@@ -203,6 +229,12 @@ export default function ProjectNotifications({
                                 {notification.progressPercentage.toFixed(1)}% concluído
                               </span>
                             )}
+                          </div>
+                          {/* Action suggestions */}
+                          <div className="mt-2 text-xs text-red-600">
+                            {notification.type === 'overdue' && '💡 Sugestão: Revisar cronograma e realocar recursos'}
+                            {notification.type === 'deadline_risk' && '💡 Sugestão: Acelerar atividades críticas'}
+                            {notification.type === 'progress_slow' && '💡 Sugestão: Verificar bloqueios e aumentar dedicação'}
                           </div>
                         </div>
                         <Button
@@ -249,9 +281,18 @@ export default function ProjectNotifications({
                               <Badge variant={getSeverityColor(notification.severity)} className="text-xs">
                                 {getSeverityText(notification.severity)}
                               </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {notification.type === 'overdue' && '🚨 Atrasado'}
+                                {notification.type === 'deadline_risk' && '⚠️ Risco de Atraso'}
+                                {notification.type === 'progress_slow' && '📉 Progresso Lento'}
+                                {notification.type === 'phase_delayed' && '⏰ Fase Atrasada'}
+                              </Badge>
                               {notification.daysRemaining !== undefined && (
-                                <span className="text-xs text-orange-600">
-                                  {notification.daysRemaining} dias restantes
+                                <span className="text-xs text-orange-600 font-medium">
+                                  {notification.daysRemaining > 0
+                                    ? `${notification.daysRemaining} dias restantes`
+                                    : `${Math.abs(notification.daysRemaining)} dias atrasado`
+                                  }
                                 </span>
                               )}
                               {notification.progressPercentage !== undefined && (
@@ -259,6 +300,12 @@ export default function ProjectNotifications({
                                   {notification.progressPercentage.toFixed(1)}% concluído
                                 </span>
                               )}
+                            </div>
+                            {/* Action suggestions */}
+                            <div className="mt-2 text-xs text-orange-600">
+                              {notification.type === 'overdue' && '💡 Sugestão: Revisar cronograma e realocar recursos'}
+                              {notification.type === 'deadline_risk' && '💡 Sugestão: Acelerar atividades críticas'}
+                              {notification.type === 'progress_slow' && '💡 Sugestão: Verificar bloqueios e aumentar dedicação'}
                             </div>
                           </div>
                           <Button

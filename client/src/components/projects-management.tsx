@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Button } from "@/components/ui/button";
+// Removed Button import - using pattern-aware buttons
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +12,7 @@ import { CardDescriptionText } from "@/components/ui/formatted-text";
 import { useToast } from "@/hooks/use-toast";
 import { CustomModal } from "@/components/ui/custom-modal";
 import ProjectPhasesManagement from "@/components/project-phases-management";
+import { useTheme } from "@/hooks/use-theme";
 import { FolderOpen, Plus, Edit, Trash2, Calendar, Clock, Building2, RefreshCw, Timer, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePomodoroManualCheck } from "@/hooks/use-pomodoro-auto-completion";
@@ -97,6 +98,7 @@ export default function ProjectsManagement() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { getCardClasses, getButtonClasses } = useTheme();
 
   // Pomodoro auto-completion manual check
   const { manualCheck: checkPomodoroTasks, isLoading: isPomodoroCheckLoading } = usePomodoroManualCheck();
@@ -352,29 +354,30 @@ export default function ProjectsManagement() {
           <p className="text-gray-600">Gerencie projetos e acompanhe o progresso</p>
         </div>
         <div className="flex space-x-2">
-          <Button
+          <button
             onClick={handleUpdateAllProgress}
-            variant="outline"
-            className="border-green-600 text-green-600 hover:bg-green-50"
             disabled={updateProgressMutation.isPending}
+            className={`${getButtonClasses('outline')} border-green-600 text-green-600 hover:bg-green-50 flex items-center gap-2 transition-all duration-300 ease-in-out`}
           >
-            <RefreshCw className={cn("w-4 h-4 mr-2", updateProgressMutation.isPending && "animate-spin")} />
+            <RefreshCw className={cn("w-4 h-4", updateProgressMutation.isPending && "animate-spin")} />
             {updateProgressMutation.isPending ? "Atualizando..." : "Atualizar Progresso"}
-          </Button>
-          <Button
+          </button>
+          <button
             onClick={() => checkPomodoroTasks()}
-            variant="outline"
-            className="border-orange-600 text-orange-600 hover:bg-orange-50"
             disabled={isPomodoroCheckLoading}
             title="Verificar e concluir automaticamente tarefas Pomodoro atrasadas"
+            className={`${getButtonClasses('outline')} border-orange-600 text-orange-600 hover:bg-orange-50 flex items-center gap-2 transition-all duration-300 ease-in-out`}
           >
-            <Timer className={cn("w-4 h-4 mr-2", isPomodoroCheckLoading && "animate-pulse")} />
+            <Timer className={cn("w-4 h-4", isPomodoroCheckLoading && "animate-pulse")} />
             {isPomodoroCheckLoading ? "Verificando..." : "Verificar Pomodoros"}
-          </Button>
-          <Button onClick={handleNewProject} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-2" />
+          </button>
+          <button
+            onClick={handleNewProject}
+            className={`${getButtonClasses('primary')} flex items-center gap-2`}
+          >
+            <Plus className="w-4 h-4" />
             Novo Projeto
-          </Button>
+          </button>
         </div>
 
       </div>
@@ -514,26 +517,27 @@ export default function ProjectsManagement() {
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
-            <Button
+            <button
               type="button"
-              variant="outline"
               onClick={handleModalClose}
+              className={`${getButtonClasses('outline')} flex items-center justify-center`}
             >
               Cancelar
-            </Button>
-            <Button
+            </button>
+            <button
               type="submit"
               disabled={createProjectMutation.isPending || updateProjectMutation.isPending}
+              className={`${getButtonClasses('primary')} flex items-center justify-center`}
             >
               {editingProject ? "Atualizar" : "Criar"}
-            </Button>
+            </button>
           </div>
         </form>
       </CustomModal>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {(projects as Project[]).map((project: Project) => (
-          <Card key={project.id} className="hover:shadow-md transition-shadow">
+          <Card key={project.id} className="hover:shadow-md transition-all duration-300 ease-in-out hover:-translate-y-0.5">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-2">
@@ -589,31 +593,27 @@ export default function ProjectsManagement() {
               )}
 
               <div className="flex justify-end space-x-2 pt-2">
-                <Button
-                  size="sm"
-                  variant="outline"
+                <button
                   onClick={() => handleManagePhases(project)}
                   title="Gerenciar Fases"
+                  className={`${getButtonClasses('outline')} px-3 py-1 text-sm flex items-center justify-center`}
                 >
                   <Layers className="w-4 h-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
+                </button>
+                <button
                   onClick={() => handleEdit(project)}
                   title="Editar Projeto"
+                  className={`${getButtonClasses('outline')} px-3 py-1 text-sm flex items-center justify-center`}
                 >
                   <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
+                </button>
+                <button
                   onClick={() => handleDelete(project.id)}
-                  className="text-red-600 hover:text-red-700"
                   title="Excluir Projeto"
+                  className={`${getButtonClasses('outline')} px-3 py-1 text-sm flex items-center justify-center text-red-600 hover:text-red-700 transition-all duration-300 ease-in-out`}
                 >
                   <Trash2 className="w-4 h-4" />
-                </Button>
+                </button>
               </div>
             </CardContent>
           </Card>
@@ -622,13 +622,16 @@ export default function ProjectsManagement() {
 
       {(projects as Project[]).length === 0 && (
         <div className="text-center py-12">
-          <FolderOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum projeto cadastrado</h3>
-          <p className="text-gray-600 mb-4">Comece criando seu primeiro projeto</p>
-          <Button onClick={handleNewProject} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-2" />
+          <FolderOpen className="w-12 h-12 text-theme-muted mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-theme-primary mb-2">Nenhum projeto cadastrado</h3>
+          <p className="text-theme-secondary mb-4">Comece criando seu primeiro projeto</p>
+          <button
+            onClick={handleNewProject}
+            className={`${getButtonClasses('primary')} flex items-center gap-2`}
+          >
+            <Plus className="w-4 h-4" />
             Criar Primeiro Projeto
-          </Button>
+          </button>
         </div>
       )}
 

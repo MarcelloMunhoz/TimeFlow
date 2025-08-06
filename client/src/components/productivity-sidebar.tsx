@@ -6,7 +6,7 @@ import { CheckCircle, Clock, AlertTriangle, TrendingUp, Filter, Calendar, BarCha
 
 interface ProductivityStats {
   todayCompleted: number;
-  scheduledHoursToday: number;
+  scheduledHoursToday: string;
   slaExpired: number;
   slaCompliance: number;
   rescheduled: number;
@@ -80,8 +80,8 @@ export default function ProductivitySidebar({ onFilterChange }: ProductivitySide
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Horas Agendadas</p>
-                    <p className="text-2xl font-bold text-blue-600">{stats?.scheduledHoursToday || 0}h</p>
+                    <p className="text-sm text-gray-600">Tempo Trabalhado</p>
+                    <p className="text-2xl font-bold text-blue-600">{stats?.scheduledHoursToday || "0min"}</p>
                   </div>
                   <Clock className="text-blue-600 text-2xl w-8 h-8" />
                 </div>

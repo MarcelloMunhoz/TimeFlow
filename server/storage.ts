@@ -108,7 +108,7 @@ export interface IStorage {
   // Analytics
   getProductivityStats(): Promise<{
     todayCompleted: number;
-    scheduledHoursToday: number;
+    scheduledHoursToday: string;
     slaExpired: number;
     slaCompliance: number;
     rescheduled: number;
@@ -569,6 +569,50 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // Auto-populate missing project dates for completed projects
+  async autoPopulateProjectDates(): Promise<void> {
+    try {
+      console.log("📅 Auto-populating missing project dates...");
+
+      const completedProjects = await db.select().from(projects).where(eq(projects.status, 'completed'));
+      const today = new Date().toISOString().split('T')[0];
+
+      for (const project of completedProjects) {
+        let needsUpdate = false;
+        const updates: any = {};
+
+        // Set actualEndDate if missing
+        if (!project.actualEndDate) {
+          updates.actualEndDate = today;
+          needsUpdate = true;
+        }
+
+        // Set actualStartDate if missing (estimate 30 days before end)
+        if (!project.actualStartDate) {
+          const endDate = new Date(project.actualEndDate || today);
+          endDate.setDate(endDate.getDate() - 30); // Estimate 30 days duration
+          updates.actualStartDate = endDate.toISOString().split('T')[0];
+          needsUpdate = true;
+        }
+
+        // Set endDate if missing (use actualEndDate or today)
+        if (!project.endDate) {
+          updates.endDate = project.actualEndDate || today;
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          await db.update(projects).set(updates).where(eq(projects.id, project.id));
+          console.log(`📅 Updated dates for project: ${project.name}`);
+        }
+      }
+
+      console.log("📅 Project dates auto-population completed");
+    } catch (error) {
+      console.error("💥 Error auto-populating project dates:", error);
+    }
+  }
+
   // Calculate KPIs for project management dashboard
   async calculateProjectKPIs(filters?: {
     startDate?: string;
@@ -582,11 +626,28 @@ export class DatabaseStorage implements IStorage {
     averageExecutionTime: number;
     projectsAtRisk: number;
     averageProgressPercentage: number;
-    phaseEfficiency: Array<{ phaseName: string; averageDuration: number; plannedDuration: number }>;
-    monthlyTrend: Array<{ month: string; completed: number; started: number }>;
+    phaseEfficiency: Array<{
+      phaseName: string;
+      averageDuration: number;
+      plannedDuration: number;
+      efficiency: number;
+      completedCount: number;
+      totalCount: number;
+    }>;
+    monthlyTrend: Array<{
+      month: string;
+      displayMonth: string;
+      completed: number;
+      started: number;
+      active: number;
+      completionRate: number;
+    }>;
   }> {
     try {
       console.log("📊 Calculating project KPIs with filters:", filters);
+
+      // Auto-populate missing dates first
+      await this.autoPopulateProjectDates();
 
       // Build where conditions using Drizzle ORM
       let whereConditions: any[] = [];
@@ -677,9 +738,10 @@ export class DatabaseStorage implements IStorage {
       const phaseEfficiency = Object.keys(phaseGroups).map(phaseName => {
         const phases = phaseGroups[phaseName];
         const completedPhases = phases.filter((p: any) => p.status === 'completed');
+        const allPhasesForCalculation = phases.filter((p: any) => p.plannedStartDate && p.plannedEndDate);
 
-        // Calculate average duration for completed phases
-        const totalDuration = completedPhases.reduce((total: number, phase: any) => {
+        // Calculate average actual duration for completed phases
+        const totalActualDuration = completedPhases.reduce((total: number, phase: any) => {
           if (phase.actualStartDate && phase.actualEndDate) {
             const startDate = new Date(phase.actualStartDate);
             const endDate = new Date(phase.actualEndDate);
@@ -690,39 +752,95 @@ export class DatabaseStorage implements IStorage {
           return total;
         }, 0);
 
-        const averageDuration = completedPhases.length > 0 ? totalDuration / completedPhases.length : 0;
+        // Calculate average planned duration from all phases with planned dates
+        const totalPlannedDuration = allPhasesForCalculation.reduce((total: number, phase: any) => {
+          if (phase.plannedStartDate && phase.plannedEndDate) {
+            const startDate = new Date(phase.plannedStartDate);
+            const endDate = new Date(phase.plannedEndDate);
+            const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return total + diffDays;
+          }
+          return total;
+        }, 0);
 
-        // Estimate planned duration based on phase type
-        const plannedDuration = phaseName.toLowerCase().includes('planejamento') ? 7 :
-                               phaseName.toLowerCase().includes('desenvolvimento') ? 21 :
-                               phaseName.toLowerCase().includes('teste') ? 10 : 14;
+        const averageActualDuration = completedPhases.length > 0 ? totalActualDuration / completedPhases.length : 0;
+        const averagePlannedDuration = allPhasesForCalculation.length > 0 ? totalPlannedDuration / allPhasesForCalculation.length : 0;
+
+        // Fallback to estimated duration if no planned data available
+        const fallbackPlannedDuration = phaseName.toLowerCase().includes('planejamento') ? 7 :
+                                       phaseName.toLowerCase().includes('desenvolvimento') ? 21 :
+                                       phaseName.toLowerCase().includes('implementação') ? 14 :
+                                       phaseName.toLowerCase().includes('automatização') ? 10 :
+                                       phaseName.toLowerCase().includes('entendimento') ? 5 :
+                                       phaseName.toLowerCase().includes('requisitos') ? 8 :
+                                       phaseName.toLowerCase().includes('solução') ? 12 :
+                                       phaseName.toLowerCase().includes('validação') ? 6 :
+                                       phaseName.toLowerCase().includes('teste') ? 10 : 14;
+
+        const finalPlannedDuration = averagePlannedDuration > 0 ? averagePlannedDuration : fallbackPlannedDuration;
 
         return {
           phaseName,
-          averageDuration: Math.round(averageDuration * 100) / 100,
-          plannedDuration
+          averageDuration: Math.round(averageActualDuration * 100) / 100,
+          plannedDuration: Math.round(finalPlannedDuration * 100) / 100,
+          efficiency: averageActualDuration > 0 && finalPlannedDuration > 0 ?
+                     Math.round((finalPlannedDuration / averageActualDuration) * 100) : 100,
+          completedCount: completedPhases.length,
+          totalCount: phases.length
         };
-      });
+      }).filter(phase => phase.completedCount > 0 || phase.totalCount > 0); // Only show phases with data
 
-      // Generate monthly trend data
+      // Generate monthly trend data for the last 6 months
       const currentDate = new Date();
       const monthlyTrend = [];
-      for (let i = 2; i >= 0; i--) {
+
+      for (let i = 5; i >= 0; i--) {
         const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
         const monthStr = date.toISOString().slice(0, 7);
 
-        const monthProjects = allProjects.filter(p => {
+        // Format month for display (e.g., "2025-01" -> "Jan 2025")
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        const displayMonth = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+
+        // Projects started in this month
+        const startedProjects = allProjects.filter(p => {
           const projectDate = p.startDate ? new Date(p.startDate) : null;
           return projectDate && projectDate.toISOString().slice(0, 7) === monthStr;
         });
 
-        const completed = monthProjects.filter(p => p.status === 'completed').length;
-        const started = monthProjects.length;
+        // Projects completed in this month (by endDate or completedAt)
+        const completedProjects = allProjects.filter(p => {
+          if (p.status !== 'completed') return false;
+
+          // Check endDate first, then fall back to updatedAt
+          const completionDate = p.endDate ? new Date(p.endDate) :
+                                p.updatedAt ? new Date(p.updatedAt) : null;
+          return completionDate && completionDate.toISOString().slice(0, 7) === monthStr;
+        });
+
+        // Projects active during this month
+        const activeProjects = allProjects.filter(p => {
+          const startDate = p.startDate ? new Date(p.startDate) : null;
+          const endDate = p.endDate ? new Date(p.endDate) : new Date(); // Use current date if no end date
+
+          if (!startDate) return false;
+
+          const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+          const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+          return startDate <= monthEnd && endDate >= monthStart;
+        });
 
         monthlyTrend.push({
           month: monthStr,
-          completed,
-          started
+          displayMonth,
+          completed: completedProjects.length,
+          started: startedProjects.length,
+          active: activeProjects.length,
+          completionRate: startedProjects.length > 0 ?
+                         Math.round((completedProjects.length / startedProjects.length) * 100) : 0
         });
       }
 
@@ -1058,7 +1176,7 @@ export class DatabaseStorage implements IStorage {
 
   async getProductivityStats(): Promise<{
     todayCompleted: number;
-    scheduledHoursToday: number;
+    scheduledHoursToday: string;
     slaExpired: number;
     slaCompliance: number;
     rescheduled: number;
@@ -1076,14 +1194,20 @@ export class DatabaseStorage implements IStorage {
     // For now, we'll approximate by checking for multiple appointments with same title
     const rescheduledCount = this.calculateRescheduledCount(allAppointments);
     
-    // Calculate scheduled hours today
-    const scheduledMinutesToday = todayAppointments
-      .filter(apt => !apt.isPomodoro)
-      .reduce((total, apt) => total + apt.durationMinutes, 0);
+    // Calculate actual worked hours today (using real time worked, not just estimated)
+    const workedMinutesToday = todayAppointments
+      .filter(apt => !apt.isPomodoro && apt.status === 'completed')
+      .reduce((total, apt) => {
+        // Use actual time worked if available, otherwise fall back to estimated duration
+        if (apt.actualTimeMinutes && apt.actualTimeMinutes > 0) {
+          return total + apt.actualTimeMinutes;
+        }
+        return total + apt.durationMinutes;
+      }, 0);
     
-    // Calculate SLA metrics
-    const appointmentsWithSLA = allAppointments.filter(apt => apt.slaMinutes && !apt.isPomodoro);
-    const slaExpired = appointmentsWithSLA.filter(apt => {
+    // Calculate SLA metrics for TODAY only
+    const todayAppointmentsWithSLA = todayAppointments.filter(apt => apt.slaMinutes && !apt.isPomodoro);
+    const slaExpiredToday = todayAppointmentsWithSLA.filter(apt => {
       if (apt.status === 'completed' && apt.completedAt) {
         const completedDate = new Date(apt.completedAt);
         const scheduledDate = new Date(`${apt.date}T${apt.startTime}`);
@@ -1099,8 +1223,8 @@ export class DatabaseStorage implements IStorage {
       return false;
     });
 
-    const slaCompliance = appointmentsWithSLA.length > 0 
-      ? Math.round(((appointmentsWithSLA.length - slaExpired.length) / appointmentsWithSLA.length) * 100)
+    const slaCompliance = todayAppointmentsWithSLA.length > 0
+      ? Math.round(((todayAppointmentsWithSLA.length - slaExpiredToday.length) / todayAppointmentsWithSLA.length) * 100)
       : 100;
 
     // Find next task
@@ -1108,18 +1232,38 @@ export class DatabaseStorage implements IStorage {
 
     return {
       todayCompleted: completedToday.length,
-      scheduledHoursToday: Math.round((scheduledMinutesToday / 60) * 10) / 10,
-      slaExpired: slaExpired.length,
+      scheduledHoursToday: this.formatMinutesToHoursAndMinutes(workedMinutesToday),
+      slaExpired: slaExpiredToday.length,
       slaCompliance,
-      rescheduled: rescheduledCount,
+      rescheduled: this.calculateRescheduledCountToday(todayAppointments),
       pomodorosToday: pomodorosToday.length,
       nextTask,
     };
   }
 
   private calculateRescheduledCount(appointments: any[]): number {
-    // Count total reschedules across all appointments
+    // Count total reschedules across all appointments (for historical data)
     return appointments.reduce((total, apt) => total + (apt.rescheduleCount || 0), 0);
+  }
+
+  private calculateRescheduledCountToday(todayAppointments: any[]): number {
+    // Count reschedules for TODAY only
+    return todayAppointments.reduce((total, apt) => total + (apt.rescheduleCount || 0), 0);
+  }
+
+  private formatMinutesToHoursAndMinutes(totalMinutes: number): string {
+    if (totalMinutes === 0) return "0min";
+
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours === 0) {
+      return `${minutes}min`;
+    } else if (minutes === 0) {
+      return `${hours}h`;
+    } else {
+      return `${hours}h${minutes}min`;
+    }
   }
 
   private findNextTask(appointments: any[]): string {

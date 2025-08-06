@@ -7,6 +7,7 @@ import { format, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, sta
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { ptBR } from "date-fns/locale";
+import { useTheme } from "@/hooks/use-theme";
 
 interface CalendarViewProps {
   selectedDate: string;
@@ -25,6 +26,7 @@ const STATUS_COLORS = {
 
 export default function CalendarView({ selectedDate, onDateSelect, viewMode }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const { getCardClasses } = useTheme();
   
   const { data: appointments = [] } = useQuery({
     queryKey: ['/api/appointments'],
@@ -112,15 +114,15 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
               <div key={dayString} className="space-y-3">
                 {/* Day Header */}
                 <div className="text-center">
-                  <div className={cn("text-sm font-medium text-gray-500 uppercase tracking-wide")}>
+                  <div className={cn("text-sm font-medium text-theme-secondary uppercase tracking-wide")}>
                     {format(day, 'EEEE', { locale: ptBR })}
                   </div>
                   <div
                     className={cn(
-                      "text-2xl font-bold mt-1 cursor-pointer hover:text-blue-600 transition-colors",
+                      "text-2xl font-bold mt-1 cursor-pointer text-theme-primary hover:text-theme-accent transition-colors",
                       {
-                        "text-blue-600": isSelected,
-                        "text-blue-700 bg-blue-100 rounded-full w-10 h-10 flex items-center justify-center mx-auto": isToday,
+                        "text-theme-accent": isSelected,
+                        "text-theme-accent bg-theme-secondary rounded-full w-10 h-10 flex items-center justify-center mx-auto": isToday,
                       }
                     )}
                     onClick={() => onDateSelect(dayString)}
@@ -308,7 +310,7 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
     
     return (
       <div className="space-y-4">
-        <div className="text-center text-lg font-semibold text-gray-900 py-4">
+        <div className="text-center text-lg font-semibold text-theme-primary py-4">
           {format(currentDate, "EEEE, dd 'de' MMMM", { locale: ptBR })}
         </div>
         
@@ -357,7 +359,7 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
             })}
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-theme-secondary">
             Nenhum agendamento para este dia
           </div>
         )}
@@ -366,13 +368,13 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
   };
 
   return (
-    <Card className="mb-6">
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
+    <Card className={`${getCardClasses()} mb-6`}>
+      <div className="flex items-center justify-between p-4 border-b border-theme-border">
         <div className="flex items-center space-x-4">
           <Button variant="ghost" size="sm" onClick={() => navigate('prev')}>
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-xl font-semibold text-theme-primary">
             {getTitle()}
           </h2>
           <Button variant="ghost" size="sm" onClick={() => navigate('next')}>

@@ -28,7 +28,7 @@ export default function AppointmentOverlapIndicator({
           <Badge 
             variant="secondary" 
             className={cn(
-              "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 cursor-help",
+              "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 cursor-help transition-all duration-300 ease-in-out",
               className
             )}
           >
