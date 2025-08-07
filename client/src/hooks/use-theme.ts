@@ -44,6 +44,13 @@ export function useTheme() {
       // Aplicar atributo de tema ao HTML
       root.setAttribute('data-theme', theme);
 
+      // Aplicar classe dark do Tailwind
+      if (theme === 'dark') {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+
       // Aplicar classes de padrão de design
       root.classList.remove('pattern-neomorphism', 'pattern-glassmorphism', 'pattern-standard');
       root.classList.add(`pattern-${designPattern}`);
@@ -62,6 +69,8 @@ export function useTheme() {
       // Salvar no localStorage
       localStorage.setItem(THEME_STORAGE_KEY, theme);
       localStorage.setItem(DESIGN_PATTERN_STORAGE_KEY, designPattern);
+
+      console.log(`🎨 useTheme: Tema aplicado - ${theme}, Dark class: ${theme === 'dark' ? 'added' : 'removed'}`);
     }
   }, [theme, designPattern]);
 

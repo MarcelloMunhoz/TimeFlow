@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Check, Clock, Edit, Trash2, AlertTriangle, Building2, FolderOpen, User, Repeat, Link } from "lucide-react";
+import { Check, Clock, Edit, Trash2, AlertTriangle, Building2, FolderOpen, User, Repeat, Link, X } from "lucide-react";
 import { formatDisplayDate, getAppointmentStatus, isSLAExpired } from "@/lib/date-utils";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -30,30 +30,30 @@ interface TaskListProps {
 
 const STATUS_CONFIG = {
   completed: {
-    color: 'bg-green-50 border-green-200',
+    color: 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-700/50',
     dotColor: 'bg-green-500',
-    badgeColor: 'bg-green-100 text-green-700',
+    badgeColor: 'bg-green-100 text-green-700 dark:bg-green-800/30 dark:text-green-300',
     icon: Check,
     label: 'Concluído'
   },
   delayed: {
-    color: 'bg-red-50 border-red-200',
+    color: 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-700/50',
     dotColor: 'bg-red-500',
-    badgeColor: 'bg-red-100 text-red-700',
+    badgeColor: 'bg-red-100 text-red-700 dark:bg-red-800/30 dark:text-red-300',
     icon: AlertTriangle,
     label: 'SLA Vencido'
   },
   future: {
-    color: 'bg-white border-gray-200',
+    color: 'bg-white border-gray-200 dark:bg-gray-800/50 dark:border-gray-600/50',
     dotColor: 'bg-blue-500',
-    badgeColor: 'bg-blue-100 text-blue-700',
+    badgeColor: 'bg-blue-100 text-blue-700 dark:bg-blue-800/30 dark:text-blue-300',
     icon: Clock,
     label: 'Agendado'
   },
   pomodoro: {
-    color: 'bg-gray-50 border-gray-200',
+    color: 'bg-gray-50 border-gray-200 dark:bg-gray-800/30 dark:border-gray-600/50',
     dotColor: 'bg-gray-400',
-    badgeColor: 'bg-gray-100 text-gray-600',
+    badgeColor: 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300',
     icon: Clock,
     label: 'Pomodoro'
   }
@@ -88,6 +88,7 @@ export default function TaskList({
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
   const [forceRender, setForceRender] = useState(0);
+  const [isEditModalTransitioning, setIsEditModalTransitioning] = useState(false);
 
   // Force re-render when selectedDate changes
   useEffect(() => {
@@ -302,8 +303,29 @@ export default function TaskList({
   };
 
   const handleEdit = (appointment: any) => {
+    // Prevent rapid clicking that could cause modal instability
+    if (isEditModalTransitioning) {
+      return;
+    }
+
+    setIsEditModalTransitioning(true);
     setSelectedAppointment(appointment);
     setShowEditModal(true);
+
+    // Reset transition flag after a short delay
+    setTimeout(() => {
+      setIsEditModalTransitioning(false);
+    }, 300);
+  };
+
+  const handleEditModalClose = (open: boolean) => {
+    if (!open) {
+      setShowEditModal(false);
+      // Clear selected appointment after modal closes to prevent stale data
+      setTimeout(() => {
+        setSelectedAppointment(null);
+      }, 100);
+    }
   };
 
   if (isLoading) {
@@ -336,7 +358,7 @@ export default function TaskList({
 
       <div className="p-6 space-y-3">
         {appointments.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             {currentStatusFilter === 'all' && 'Nenhum agendamento encontrado'}
             {currentStatusFilter === 'open' && 'Nenhum agendamento pendente'}
             {currentStatusFilter === 'completed' && 'Nenhum agendamento concluído'}
@@ -355,7 +377,7 @@ export default function TaskList({
               <div
                 key={appointment.id}
                 className={cn(
-                  "flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50",
+                  "flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors duration-300 ease-in-out",
                   config.color
                 )}
               >
@@ -368,13 +390,13 @@ export default function TaskList({
                     <div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-gray-900">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                             {appointment.title}
                           </p>
                           {appointment.isRecurring && (
                             <div className="flex items-center gap-1">
                               <Repeat className="w-3 h-3 text-blue-500" />
-                              <span className="text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">
+                              <span className="text-xs text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">
                                 {appointment.recurrencePattern === 'daily' && 'Diário'}
                                 {appointment.recurrencePattern === 'weekly' && 'Semanal'}
                                 {appointment.recurrencePattern === 'monthly' && 'Mensal'}
@@ -385,18 +407,18 @@ export default function TaskList({
                           {appointment.recurringTaskId && !appointment.isRecurringTemplate && (
                             <div className="flex items-center gap-1">
                               <Link className="w-3 h-3 text-green-500" />
-                              <span className="text-xs text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
+                              <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">
                                 Instância
                               </span>
                             </div>
                           )}
                           {appointment.wasRescheduledFromWeekend && (
-                            <span className="text-xs text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded" title="Reagendado do fim de semana">
+                            <span className="text-xs text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 rounded" title="Reagendado do fim de semana">
                               Reagendado
                             </span>
                           )}
                         </div>
-                        <span className="text-xs text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded ml-2">
+                        <span className="text-xs text-gray-400 dark:text-gray-500 font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded ml-2">
                           ID: {appointment.id}
                         </span>
                       </div>
@@ -404,25 +426,25 @@ export default function TaskList({
                       {/* Assignment Information */}
                       <div className="mt-2 space-y-1">
                         {getCompanyName(appointment) && (
-                          <div className="flex items-center text-xs text-gray-600">
+                          <div className="flex items-center text-xs text-gray-600 dark:text-gray-300">
                             <Building2 className="w-3 h-3 mr-1 text-blue-500" />
                             <span>{getCompanyName(appointment)}</span>
                           </div>
                         )}
                         {getProjectName(appointment) && (
-                          <div className="flex items-center text-xs text-gray-600">
+                          <div className="flex items-center text-xs text-gray-600 dark:text-gray-300">
                             <FolderOpen className="w-3 h-3 mr-1 text-green-500" />
                             <span>{getProjectName(appointment)}</span>
                           </div>
                         )}
                         {getAssignedUserName(appointment) && (
-                          <div className="flex items-center text-xs text-gray-600">
+                          <div className="flex items-center text-xs text-gray-600 dark:text-gray-300">
                             <User className="w-3 h-3 mr-1 text-purple-500" />
                             <span>{getAssignedUserName(appointment)}</span>
                           </div>
                         )}
                         {appointment.peopleWith && (
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
                             Com: {appointment.peopleWith}
                           </p>
                         )}
@@ -532,14 +554,14 @@ export default function TaskList({
                   </div>
                   
                   <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center space-x-4 text-xs text-gray-500">
+                    <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
                       <span>
                         <Clock className="w-3 h-3 inline mr-1" />
                         {appointment.startTime} - {appointment.endTime}
                       </span>
                       <span>
                         ⏱️ {Math.round((appointment.actualTimeMinutes || 0) / 60 * 10) / 10}h
-                        <span className="text-gray-400 text-xs ml-1">
+                        <span className="text-gray-400 dark:text-gray-500 text-xs ml-1">
                           / {Math.round(appointment.durationMinutes / 60 * 10) / 10}h
                         </span>
                       </span>
@@ -556,7 +578,7 @@ export default function TaskList({
                     </div>
 
                     {/* Timer Controls */}
-                    <div className="ml-auto bg-red-100 p-1 rounded text-xs">
+                    <div className="ml-auto bg-red-100 dark:bg-red-900/20 p-1 rounded text-xs text-red-700 dark:text-red-300">
                       Timer ID: {appointment.id}
                     </div>
                     <TimerControls
@@ -616,11 +638,11 @@ export default function TaskList({
         </DialogContent>
       </Dialog>
 
-      {/* Edit Modal */}
+      {/* Edit Modal - ORIGINAL AppointmentForm */}
       {selectedAppointment && (
         <AppointmentForm
           open={showEditModal}
-          onOpenChange={setShowEditModal}
+          onOpenChange={handleEditModalClose}
           defaultDate={selectedAppointment.date}
           editingAppointment={selectedAppointment}
         />

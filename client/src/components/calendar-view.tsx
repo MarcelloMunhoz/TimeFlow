@@ -134,8 +134,8 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                 {/* Time Slots */}
                 <div className="space-y-2 min-h-[500px] md:min-h-[700px]">
                   {/* Morning Slot (08:00 - 12:00) */}
-                  <div className="bg-gray-50 rounded-lg p-3 min-h-[120px] md:min-h-[180px]">
-                    <div className="text-xs text-gray-500 font-medium mb-2">08:00</div>
+                  <div className="bg-gray-50 dark:bg-gray-800/30 rounded-lg p-3 min-h-[120px] md:min-h-[180px]">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">08:00</div>
                     {dayAppointments
                       .filter((apt: any) => {
                         const hour = parseInt(apt.startTime.split(':')[0]);
@@ -147,7 +147,7 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                           <div
                             key={apt.id}
                             className={cn(
-                              "mb-2 p-2 rounded-lg border-l-4 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer",
+                              "mb-2 p-2 rounded-lg border-l-4 bg-white dark:bg-gray-800/50 shadow-sm hover:shadow-md transition-all duration-300 ease-in-out cursor-pointer",
                               {
                                 "border-l-green-500": status === 'completed',
                                 "border-l-red-500": status === 'delayed',
@@ -158,26 +158,26 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                             title={`${apt.startTime} - ${apt.title}`}
                           >
                             <div className="flex items-center gap-2 mb-1">
-                              <Clock className="w-3 h-3 text-gray-500" />
-                              <div className="text-xs font-medium text-gray-600">
+                              <Clock className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                              <div className="text-xs font-medium text-gray-600 dark:text-gray-300">
                                 {apt.startTime}
                               </div>
                               {apt.isPomodoro && (
                                 <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
                               )}
                             </div>
-                            <div className="text-sm font-medium text-gray-900 truncate">
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                               {apt.title}
                             </div>
                             {apt.description && (
-                              <div className="text-xs text-gray-500 truncate mt-1">
+                              <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
                                 {apt.description}
                               </div>
                             )}
                             {apt.company && (
                               <div className="flex items-center gap-1 mt-1">
-                                <Building className="w-3 h-3 text-gray-500" />
-                                <div className="text-xs text-gray-600 truncate">
+                                <Building className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                                <div className="text-xs text-gray-600 dark:text-gray-300 truncate">
                                   {apt.company}
                                 </div>
                               </div>
@@ -195,8 +195,8 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                   </div>
 
                   {/* Afternoon Slot (13:00 - 18:00) */}
-                  <div className="bg-gray-50 rounded-lg p-3 min-h-[150px] md:min-h-[250px]">
-                    <div className="text-xs text-gray-500 font-medium mb-2">13:00</div>
+                  <div className="bg-gray-50 dark:bg-gray-800/30 rounded-lg p-3 min-h-[150px] md:min-h-[250px]">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">13:00</div>
                     {dayAppointments
                       .filter((apt: any) => {
                         const hour = parseInt(apt.startTime.split(':')[0]);
@@ -208,7 +208,7 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                           <div
                             key={apt.id}
                             className={cn(
-                              "mb-2 p-2 rounded-lg border-l-4 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer",
+                              "mb-2 p-2 rounded-lg border-l-4 bg-white dark:bg-gray-800/50 shadow-sm hover:shadow-md transition-all duration-300 ease-in-out cursor-pointer",
                               {
                                 "border-l-green-500": status === 'completed',
                                 "border-l-red-500": status === 'delayed',
@@ -219,26 +219,26 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                             title={`${apt.startTime} - ${apt.title}`}
                           >
                             <div className="flex items-center gap-2 mb-1">
-                              <Clock className="w-3 h-3 text-gray-500" />
-                              <div className="text-xs font-medium text-gray-600">
+                              <Clock className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                              <div className="text-xs font-medium text-gray-600 dark:text-gray-300">
                                 {apt.startTime}
                               </div>
                               {apt.isPomodoro && (
                                 <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
                               )}
                             </div>
-                            <div className="text-sm font-medium text-gray-900 truncate">
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                               {apt.title}
                             </div>
                             {apt.description && (
-                              <div className="text-xs text-gray-500 truncate mt-1">
+                              <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
                                 {apt.description}
                               </div>
                             )}
                             {apt.company && (
                               <div className="flex items-center gap-1 mt-1">
-                                <Building className="w-3 h-3 text-gray-500" />
-                                <div className="text-xs text-gray-600 truncate">
+                                <Building className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                                <div className="text-xs text-gray-600 dark:text-gray-300 truncate">
                                   {apt.company}
                                 </div>
                               </div>
@@ -250,8 +250,8 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                   </div>
 
                   {/* After Hours Slot (18:00+) */}
-                  <div className="bg-purple-50 rounded-lg p-3 min-h-[80px] md:min-h-[120px] border border-purple-200">
-                    <div className="text-xs text-purple-600 font-medium mb-2">18:00+</div>
+                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 min-h-[80px] md:min-h-[120px] border border-purple-200 dark:border-purple-700/50">
+                    <div className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-2">18:00+</div>
                     {dayAppointments
                       .filter((apt: any) => {
                         const hour = parseInt(apt.startTime.split(':')[0]);
@@ -263,7 +263,7 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                           <div
                             key={apt.id}
                             className={cn(
-                              "mb-2 p-2 rounded-lg border-l-4 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer",
+                              "mb-2 p-2 rounded-lg border-l-4 bg-white dark:bg-gray-800/50 shadow-sm hover:shadow-md transition-all duration-300 ease-in-out cursor-pointer",
                               {
                                 "border-l-green-500": status === 'completed',
                                 "border-l-red-500": status === 'delayed',
@@ -274,19 +274,19 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
                             title={`${apt.startTime} - ${apt.title} (Encaixe)`}
                           >
                             <div className="flex items-center gap-2 mb-1">
-                              <Clock className="w-3 h-3 text-purple-500" />
-                              <div className="text-xs font-medium text-purple-600">
+                              <Clock className="w-3 h-3 text-purple-500 dark:text-purple-400" />
+                              <div className="text-xs font-medium text-purple-600 dark:text-purple-300">
                                 {apt.startTime}
                               </div>
-                              <div className="text-xs text-purple-500 bg-purple-100 px-1 rounded">
+                              <div className="text-xs text-purple-500 dark:text-purple-400 bg-purple-100 dark:bg-purple-800/30 px-1 rounded">
                                 Encaixe
                               </div>
                             </div>
-                            <div className="text-sm font-medium text-gray-900 truncate">
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                               {apt.title}
                             </div>
                             {apt.description && (
-                              <div className="text-xs text-gray-500 truncate mt-1">
+                              <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
                                 {apt.description}
                               </div>
                             )}
@@ -321,30 +321,30 @@ export default function CalendarView({ selectedDate, onDateSelect, viewMode }: C
               return (
                 <div
                   key={apt.id}
-                  className={cn("p-4 rounded-lg border-l-4", {
-                    "border-l-green-500 bg-green-50": status === 'completed',
-                    "border-l-red-500 bg-red-50": status === 'delayed',
-                    "border-l-blue-500 bg-blue-50": status === 'future',
-                    "border-l-gray-400 bg-gray-50": status === 'pomodoro',
+                  className={cn("p-4 rounded-lg border-l-4 transition-all duration-300 ease-in-out", {
+                    "border-l-green-500 bg-green-50 dark:bg-green-900/20": status === 'completed',
+                    "border-l-red-500 bg-red-50 dark:bg-red-900/20": status === 'delayed',
+                    "border-l-blue-500 bg-blue-50 dark:bg-blue-900/20": status === 'future',
+                    "border-l-gray-400 bg-gray-50 dark:bg-gray-800/30": status === 'pomodoro',
                   })}
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-semibold text-gray-900">{apt.title}</h3>
-                        <span className="text-xs text-gray-400 font-mono bg-gray-200 px-2 py-1 rounded">
+                        <h3 className="font-semibold text-gray-900 dark:text-gray-100">{apt.title}</h3>
+                        <span className="text-xs text-gray-400 dark:text-gray-500 font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">
                           ID: {apt.id}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600">{apt.startTime} - {apt.endTime}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">{apt.startTime} - {apt.endTime}</p>
                       {apt.description && (
-                        <p className="text-sm text-gray-500 mt-1">{apt.description}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{apt.description}</p>
                       )}
                       {apt.project && (
-                        <p className="text-xs text-gray-500 mt-1">Projeto: {apt.project}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Projeto: {apt.project}</p>
                       )}
                       {apt.company && (
-                        <p className="text-xs text-gray-500">Empresa: {apt.company}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Empresa: {apt.company}</p>
                       )}
                     </div>
                     <div className={cn("px-2 py-1 rounded-full text-xs text-white ml-4", STATUS_COLORS[status])}>

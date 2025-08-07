@@ -119,8 +119,8 @@ export default function TimerControls({
 
   if (isLoading || !timerStatus) {
     return (
-      <div className={cn("flex items-center space-x-2 bg-gray-100 p-1 rounded", className)}>
-        <span className="text-xs">Carregando...</span>
+      <div className={cn("flex items-center space-x-2 bg-gray-100 dark:bg-gray-700/50 p-1 rounded", className)}>
+        <span className="text-xs text-gray-600 dark:text-gray-300">Carregando...</span>
       </div>
     );
   }
@@ -129,13 +129,13 @@ export default function TimerControls({
   const isCompleted = status === 'completed';
 
   return (
-    <div className={cn("flex items-center space-x-2 bg-blue-50 p-1 rounded", className)}>
-      <div className="flex items-center space-x-1 text-xs">
+    <div className={cn("flex items-center space-x-2 bg-blue-50 dark:bg-blue-900/20 p-1 rounded", className)}>
+      <div className="flex items-center space-x-1 text-xs text-gray-700 dark:text-gray-300">
         <Timer className="w-3 h-3" />
         <span className="font-mono">
           {Math.floor(actualTimeMinutes / 60)}h {actualTimeMinutes % 60}m
         </span>
-        <span className="text-gray-400">
+        <span className="text-gray-400 dark:text-gray-500">
           / {Math.floor(estimatedMinutes / 60)}h {estimatedMinutes % 60}m
         </span>
       </div>

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { Button } from './button';
 
@@ -11,11 +11,17 @@ interface CustomModalProps {
 }
 
 export function CustomModal({ isOpen, onClose, title, children, className = "" }: CustomModalProps) {
+  const isClosingRef = useRef(false);
+
   // Handle escape key and body scroll (optimized)
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape' && isOpen && !isClosingRef.current) {
+        isClosingRef.current = true;
         onClose();
+        setTimeout(() => {
+          isClosingRef.current = false;
+        }, 100);
       }
     };
 
@@ -40,23 +46,57 @@ export function CustomModal({ isOpen, onClose, title, children, className = "" }
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
+    <div
+      className="fixed inset-0 z-50 bg-black bg-opacity-50"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+        // Disable all transitions that could cause movement
+        transition: 'none',
+        transform: 'none',
+        animation: 'none'
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isClosingRef.current) {
+          isClosingRef.current = true;
+          onClose();
+          setTimeout(() => {
+            isClosingRef.current = false;
+          }, 100);
+        }
+      }}
+    >
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-        onClick={onClose}
-      />
-
-      {/* Modal - Improved sizing and scroll handling */}
-      <div className={`relative bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[95vh] flex flex-col ${className}`}>
+        className={`bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-4xl max-h-[95vh] flex flex-col ${className}`}
+        style={{
+          // Force stable positioning - disable all transitions and transforms
+          transition: 'none',
+          transform: 'none',
+          animation: 'none',
+          position: 'relative',
+          margin: '0 auto'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header - Fixed */}
-        <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
-          <h2 className="text-lg font-semibold text-gray-900 truncate pr-4">{title}</h2>
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate pr-4">{title}</h2>
           <Button
             variant="ghost"
             size="sm"
-            onClick={onClose}
-            className="h-8 w-8 p-0 flex-shrink-0 hover:bg-gray-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isClosingRef.current) {
+                isClosingRef.current = true;
+                onClose();
+                setTimeout(() => {
+                  isClosingRef.current = false;
+                }, 100);
+              }
+            }}
+            className="h-8 w-8 p-0 flex-shrink-0 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <X className="h-4 w-4" />
           </Button>

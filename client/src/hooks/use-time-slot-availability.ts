@@ -39,11 +39,27 @@ export function useTimeSlotAvailability({
 
   // Filter appointments for the selected date (excluding the one being edited)
   const dayAppointments = useMemo(() => {
-    return (appointments as any[]).filter((apt: any) =>
-      apt.date === selectedDate && 
+    const filtered = (appointments as any[]).filter((apt: any) =>
+      apt.date === selectedDate &&
       apt.id !== excludeAppointmentId &&
       apt.status !== 'cancelled' // Don't consider cancelled appointments
     );
+
+    console.log('🔍 TimeSlotAvailability Debug:', {
+      selectedDate,
+      totalAppointments: appointments.length,
+      dayAppointments: filtered.length,
+      excludeAppointmentId,
+      filteredAppointments: filtered.map(apt => ({
+        id: apt.id,
+        title: apt.title,
+        startTime: apt.startTime,
+        durationMinutes: apt.durationMinutes,
+        status: apt.status
+      }))
+    });
+
+    return filtered;
   }, [appointments, selectedDate, excludeAppointmentId]);
 
   // Generate time slots (every 15 minutes)
@@ -146,13 +162,31 @@ function checkTimeSlotConflicts(startTime: string, durationMinutes: number, appo
   const newStart = timeToMinutes(startTime);
   const newEnd = newStart + durationMinutes;
 
-  return appointments.filter(apt => {
+  const conflicts = appointments.filter(apt => {
     const existingStart = timeToMinutes(apt.startTime);
     const existingEnd = existingStart + apt.durationMinutes;
 
     // Check for overlap: new appointment overlaps if it starts before existing ends and ends after existing starts
-    return (newStart < existingEnd && newEnd > existingStart);
+    const hasConflict = (newStart < existingEnd && newEnd > existingStart);
+
+    if (hasConflict) {
+      console.log('⚠️ Conflict detected:', {
+        newSlot: { startTime, durationMinutes, start: newStart, end: newEnd },
+        existing: {
+          id: apt.id,
+          title: apt.title,
+          startTime: apt.startTime,
+          durationMinutes: apt.durationMinutes,
+          start: existingStart,
+          end: existingEnd
+        }
+      });
+    }
+
+    return hasConflict;
   });
+
+  return conflicts;
 }
 
 // Helper function to convert time string to minutes since midnight
@@ -170,13 +204,33 @@ function minutesToTime(minutes: number): string {
 
 // Hook for checking specific time conflicts (used in forms)
 export function useConflictCheck(selectedDate: string, startTime: string, durationMinutes: number, excludeAppointmentId?: number) {
-  const { checkConflicts } = useTimeSlotAvailability({
-    selectedDate,
-    durationMinutes,
-    excludeAppointmentId
+  const { data: appointments = [] } = useQuery({
+    queryKey: ['/api/appointments'],
+    enabled: !!selectedDate,
   });
 
   return useMemo(() => {
-    return checkConflicts(startTime);
-  }, [checkConflicts, startTime]);
+    if (!startTime || !durationMinutes || !selectedDate) {
+      return {
+        hasConflicts: false,
+        conflictingAppointments: [],
+        canProceedWithOverlap: false
+      };
+    }
+
+    // Filter appointments for the selected date (excluding the one being edited)
+    const dayAppointments = appointments.filter((apt: any) =>
+      apt.date === selectedDate &&
+      apt.id !== excludeAppointmentId &&
+      apt.status !== 'cancelled'
+    );
+
+    const conflicts = checkTimeSlotConflicts(startTime, durationMinutes, dayAppointments);
+
+    return {
+      hasConflicts: conflicts.length > 0,
+      conflictingAppointments: conflicts,
+      canProceedWithOverlap: true
+    };
+  }, [appointments, selectedDate, startTime, durationMinutes, excludeAppointmentId]);
 }

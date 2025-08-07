@@ -36,7 +36,17 @@ function AppServices() {
 
     // Apply to HTML element (most important)
     html.setAttribute('data-theme', theme);
-    html.className = `pattern-${designPattern}`;
+
+    // Apply Tailwind dark mode class
+    if (theme === 'dark') {
+      html.classList.add('dark');
+    } else {
+      html.classList.remove('dark');
+    }
+
+    // Apply design pattern class
+    html.classList.remove('pattern-neomorphism', 'pattern-glassmorphism', 'pattern-standard');
+    html.classList.add(`pattern-${designPattern}`);
 
     // Apply to body as well for extra specificity
     body.className = `theme-${theme} pattern-${designPattern} bg-theme-primary text-theme-primary`;
@@ -45,7 +55,7 @@ function AppServices() {
     html.style.setProperty('--current-theme', theme);
     html.style.setProperty('--current-pattern', designPattern);
 
-    console.log(`🎨 App: Tema aplicado - ${theme}, Padrão: ${designPattern}`);
+    console.log(`🎨 App: Tema aplicado - ${theme}, Padrão: ${designPattern}, Dark class: ${theme === 'dark' ? 'added' : 'removed'}`);
   }, [theme, designPattern, getThemeClasses]);
 
   // Pomodoro auto-completion service is now disabled - Pomodoros are created only on user request

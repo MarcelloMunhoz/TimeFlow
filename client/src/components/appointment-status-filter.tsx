@@ -25,7 +25,7 @@ const STATUS_FILTER_CONFIG = {
   all: {
     label: 'Todos',
     icon: List,
-    color: 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+    color: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600',
     activeColor: 'bg-gray-600 text-white',
     description: 'Todos os agendamentos'
   },
@@ -76,7 +76,7 @@ export default function AppointmentStatusFilter({
       <div className="hidden md:flex items-center justify-between">
         {/* Status Filter Buttons */}
         <div className="flex items-center space-x-2">
-          <span className="text-sm font-medium text-gray-700 mr-2">Status:</span>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mr-2">Status:</span>
           {Object.entries(STATUS_FILTER_CONFIG).map(([key, config]) => {
             const Icon = config.icon;
             const isActive = statusFilter === key;
@@ -101,7 +101,7 @@ export default function AppointmentStatusFilter({
                     variant="secondary" 
                     className={cn(
                       "ml-2 text-xs",
-                      isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"
+                      isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-300"
                     )}
                   >
                     {count}
@@ -114,7 +114,7 @@ export default function AppointmentStatusFilter({
 
         {/* Time Period Filter */}
         <div className="flex items-center space-x-2">
-          <span className="text-sm font-medium text-gray-700">Período:</span>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Período:</span>
           <Select value={timeFilter} onValueChange={onTimeFilterChange}>
             <SelectTrigger className="w-32">
               <SelectValue />
@@ -153,7 +153,7 @@ export default function AppointmentStatusFilter({
           <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-4">
             {/* Mobile Status Filter */}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Status</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">Status</label>
               <div className="grid grid-cols-3 gap-2">
                 {Object.entries(STATUS_FILTER_CONFIG).map(([key, config]) => {
                   const Icon = config.icon;
@@ -178,7 +178,7 @@ export default function AppointmentStatusFilter({
                           variant="secondary" 
                           className={cn(
                             "mt-1 text-xs",
-                            isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"
+                            isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-300"
                           )}
                         >
                           {count}
@@ -192,7 +192,7 @@ export default function AppointmentStatusFilter({
 
             {/* Mobile Time Filter */}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Período</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">Período</label>
               <Select value={timeFilter} onValueChange={onTimeFilterChange}>
                 <SelectTrigger>
                   <SelectValue />
@@ -215,7 +215,7 @@ export default function AppointmentStatusFilter({
 
       {/* Filter Summary */}
       {appointmentCounts && (
-        <div className="flex items-center justify-between text-sm text-gray-600 bg-gray-50 px-4 py-2 rounded-lg">
+        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 px-4 py-2 rounded-lg">
           <span>
             Mostrando <strong>{appointmentCounts[statusFilter]}</strong> agendamentos 
             {statusFilter !== 'all' && ` ${STATUS_FILTER_CONFIG[statusFilter].label.toLowerCase()}`}

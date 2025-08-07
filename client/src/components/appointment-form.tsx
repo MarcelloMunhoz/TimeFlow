@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -94,32 +94,75 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
     queryKey: ["/api/users"],
   });
 
+  // Memoize initial values to prevent re-creation on every render
+  const initialValues = useMemo(() => {
+    if (editingAppointment) {
+      return {
+        title: editingAppointment.title || "",
+        description: editingAppointment.description || "",
+        date: editingAppointment.date || defaultDate || getTodayString(),
+        startTime: editingAppointment.startTime || "",
+        durationValue: editingAppointment ? Math.round(editingAppointment.durationMinutes / (editingAppointment.durationMinutes >= 60 ? 60 : 1)) : 1,
+        durationUnit: editingAppointment ? (editingAppointment.durationMinutes >= 60 ? "hours" : "minutes") : "hours",
+        slaValue: editingAppointment?.slaMinutes ? Math.round(editingAppointment.slaMinutes / (editingAppointment.slaMinutes >= 60 ? 60 : 1)) : undefined,
+        slaUnit: editingAppointment?.slaMinutes ? (editingAppointment.slaMinutes >= 60 ? "hours" : "minutes") : "hours",
+        isPomodoro: editingAppointment.isPomodoro || false,
+        // Assignment fields
+        projectId: editingAppointment.projectId?.toString() || "",
+        companyId: editingAppointment.companyId?.toString() || "",
+        assignedUserId: editingAppointment.assignedUserId?.toString() || "",
+        phaseId: editingAppointment.phaseId?.toString() || "",
+        // Recurring task defaults
+        isRecurring: editingAppointment.isRecurring || false,
+        recurrencePattern: editingAppointment.recurrencePattern || "weekly",
+        recurrenceInterval: editingAppointment.recurrenceInterval || 1,
+        recurrenceEndType: editingAppointment.recurrenceEndDate ? "date" : "count",
+        recurrenceEndDate: editingAppointment.recurrenceEndDate || "",
+        recurrenceEndCount: editingAppointment.recurrenceEndCount || 10,
+      };
+    }
+
+    return {
+      title: "",
+      description: "",
+      date: defaultDate || getTodayString(),
+      startTime: "",
+      durationValue: 1,
+      durationUnit: "hours",
+      slaValue: undefined,
+      slaUnit: "hours",
+      isPomodoro: false,
+      projectId: "",
+      companyId: "",
+      assignedUserId: "",
+      phaseId: "",
+      isRecurring: false,
+      recurrencePattern: "weekly",
+      recurrenceInterval: 1,
+      recurrenceEndType: "count",
+      recurrenceEndDate: "",
+      recurrenceEndCount: 10,
+    };
+  }, [editingAppointment?.id, defaultDate]); // Only depend on appointment ID and defaultDate
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      title: editingAppointment?.title || "",
-      description: editingAppointment?.description || "",
-      date: editingAppointment?.date || defaultDate || getTodayString(),
-      startTime: editingAppointment?.startTime || "",
-      durationValue: editingAppointment ? Math.round(editingAppointment.durationMinutes / (editingAppointment.durationMinutes >= 60 ? 60 : 1)) : 1,
-      durationUnit: editingAppointment ? (editingAppointment.durationMinutes >= 60 ? "hours" : "minutes") : "hours",
-      slaValue: editingAppointment?.slaMinutes ? Math.round(editingAppointment.slaMinutes / (editingAppointment.slaMinutes >= 60 ? 60 : 1)) : undefined,
-      slaUnit: editingAppointment?.slaMinutes ? (editingAppointment.slaMinutes >= 60 ? "hours" : "minutes") : "hours",
-      isPomodoro: editingAppointment?.isPomodoro || false,
-      // Assignment fields
-      projectId: editingAppointment?.projectId?.toString() || "",
-      companyId: editingAppointment?.companyId?.toString() || "",
-      assignedUserId: editingAppointment?.assignedUserId?.toString() || "",
-      phaseId: editingAppointment?.phaseId?.toString() || "",
-      // Recurring task defaults
-      isRecurring: editingAppointment?.isRecurring || false,
-      recurrencePattern: editingAppointment?.recurrencePattern || "weekly",
-      recurrenceInterval: editingAppointment?.recurrenceInterval || 1,
-      recurrenceEndType: editingAppointment?.recurrenceEndDate ? "date" : "count",
-      recurrenceEndDate: editingAppointment?.recurrenceEndDate || "",
-      recurrenceEndCount: editingAppointment?.recurrenceEndCount || 10,
-    },
+    defaultValues: initialValues,
   });
+
+  // Reset form when editingAppointment changes, but only once per appointment
+  useEffect(() => {
+    if (open && editingAppointment) {
+      // Only reset if this is a different appointment
+      const currentAppointmentId = form.getValues().title === editingAppointment.title ? editingAppointment.id : null;
+      if (currentAppointmentId !== editingAppointment.id) {
+        form.reset(initialValues);
+      }
+    } else if (open && !editingAppointment) {
+      // Reset for new appointment
+      form.reset(initialValues);
+    }
+  }, [editingAppointment?.id, open]); // Only depend on appointment ID and modal open state
 
   // Watch the selected company to filter projects
   const selectedCompanyId = form.watch("companyId");
@@ -155,7 +198,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       }
       // If company is set to "none", keep the project selection (show all projects scenario)
     }
-  }, [selectedCompanyId, projects, form]);
+  }, [selectedCompanyId, projects]); // Removed 'form' to prevent infinite loops
 
   // Effect to clear phase selection when project changes
   useEffect(() => {
@@ -167,7 +210,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
         form.setValue("phaseId", "none");
       }
     }
-  }, [selectedProjectId, projectPhases, form]);
+  }, [selectedProjectId, projectPhases]); // Removed 'form' to prevent infinite loops
 
   const createAppointmentMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -251,21 +294,19 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
     }
   });
 
-  // Watch for changes to calculate end time
-  const startTime = form.watch("startTime");
-  const durationValue = form.watch("durationValue");
-  const durationUnit = form.watch("durationUnit");
-  const selectedDate = form.watch("date");
+  // Watch for changes to calculate end time (optimized to prevent excessive re-renders)
+  const watchedValues = form.watch(["startTime", "durationValue", "durationUnit", "date"]);
+  const [startTime, durationValue, durationUnit, selectedDate] = watchedValues;
 
   // Calculate duration in minutes for conflict checking
   const durationMinutes = durationValue && durationUnit
     ? (durationUnit === "hours" ? durationValue * 60 : durationValue)
     : 0;
 
-  // Check for conflicts
+  // Check for conflicts (memoized to prevent unnecessary recalculations)
   const conflictCheck = useConflictCheck(
-    selectedDate,
-    startTime,
+    selectedDate || "",
+    startTime || "",
     durationMinutes,
     editingAppointment?.id
   );
@@ -432,11 +473,11 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       {/* Removed the inner div with overflow-y-auto to prevent double scrollbars */}
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <p className="text-gray-600 text-sm leading-relaxed">
+          <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
             {isEditing ? "Atualize as informações do agendamento" : "Crie um novo agendamento com controle de SLA e Pomodoro automático"}
           </p>
           {isEditing && editingAppointment && (
-            <span className="text-xs text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded flex-shrink-0 ml-4">
+            <span className="text-xs text-gray-400 dark:text-gray-500 font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded flex-shrink-0 ml-4">
               ID: {editingAppointment.id}
             </span>
           )}
@@ -516,14 +557,14 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                     </FormControl>
                     <FormMessage />
                     {conflictCheck.hasConflicts && (
-                      <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+                      <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-md">
                         <div className="flex items-start gap-2">
-                          <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                          <AlertTriangle className="w-4 h-4 text-red-500 dark:text-red-400 mt-0.5 flex-shrink-0" />
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-red-800">
+                            <p className="text-sm font-medium text-red-800 dark:text-red-300">
                               Conflito de horário detectado
                             </p>
-                            <p className="text-xs text-red-600 mt-1">
+                            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                               {conflictCheck.conflictingAppointments.length} agendamento(s) conflitante(s) neste horário
                             </p>
                           </div>
@@ -787,7 +828,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                             {projectPhases.filter((projectPhase: any) => projectPhase.phaseId && projectPhase.phaseId.toString().trim() !== "").map((projectPhase: any) => (
                               <SelectItem key={projectPhase.phaseId} value={projectPhase.phaseId.toString()}>
                                 <div className="flex items-center space-x-2">
-                                  <span className="text-xs font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
                                     #{projectPhase.phase.orderIndex || 1}
                                   </span>
                                   <div
@@ -837,17 +878,17 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
             </div>
 
             {/* Recurring Task Section */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-lg p-4">
               <FormField
                 control={form.control}
                 name="isRecurring"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-sm font-medium text-blue-800">
+                      <FormLabel className="text-sm font-medium text-blue-800 dark:text-blue-300">
                         Tarefa Recorrente
                       </FormLabel>
-                      <FormDescription className="text-xs text-blue-700">
+                      <FormDescription className="text-xs text-blue-700 dark:text-blue-400">
                         Criar múltiplas instâncias desta tarefa automaticamente
                       </FormDescription>
                     </div>
@@ -977,8 +1018,8 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
                     />
                   )}
 
-                  <div className="bg-blue-100 border border-blue-300 rounded p-3">
-                    <p className="text-xs text-blue-800">
+                  <div className="bg-blue-100 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700/50 rounded p-3">
+                    <p className="text-xs text-blue-800 dark:text-blue-300">
                       <strong>Nota:</strong> Tarefas recorrentes são agendadas apenas em dias úteis (segunda a sexta).
                       Se uma ocorrência cair em um fim de semana, será automaticamente reagendada para a segunda-feira seguinte.
                     </p>
@@ -987,19 +1028,19 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
               )}
             </div>
 
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/50 rounded-lg p-4">
               <div className="flex items-start space-x-3">
-                <Info className="text-yellow-600 mt-0.5 w-5 h-5" />
+                <Info className="text-yellow-600 dark:text-yellow-400 mt-0.5 w-5 h-5" />
                 <div>
-                  <h4 className="text-sm font-medium text-yellow-800">Pomodoro Automático</h4>
-                  <p className="text-xs text-yellow-700 mt-1">
+                  <h4 className="text-sm font-medium text-yellow-800 dark:text-yellow-300">Pomodoro Automático</h4>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
                     Um agendamento de Pomodoro (5 min) será criado automaticamente após o término desta tarefa.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex space-x-3 pt-4 border-t border-gray-200">
+            <div className="flex space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <Button
                 type="button"
                 variant="outline"

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Clock, AlertTriangle, CheckCircle, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useTimeSlotAvailability } from '@/hooks/use-time-slot-availability';
+import { useConflictCheck, useTimeSlotAvailability } from '@/hooks/use-time-slot-availability';
 
 interface SmartTimePickerProps {
   value: string;
@@ -32,26 +32,21 @@ export default function SmartTimePicker({
   const [isOpen, setIsOpen] = useState(false);
   const [manualInput, setManualInput] = useState(value);
 
-  const {
-    timeSlots,
-    availableTimeSlots,
-    isLoading,
-    checkConflicts,
-    getSuggestedTimes,
-    hasAnyAvailableSlots
-  } = useTimeSlotAvailability({
-    selectedDate,
-    durationMinutes,
-    excludeAppointmentId
-  });
+  // Use the optimized conflict check hook directly
+  const currentConflicts = useConflictCheck(selectedDate, value, durationMinutes, excludeAppointmentId);
 
   // Update manual input when value changes externally
   useEffect(() => {
     setManualInput(value);
   }, [value]);
 
-  // Check conflicts for current value
-  const currentConflicts = checkConflicts(value);
+  // Vou usar o hook useTimeSlotAvailability que já existe e funciona corretamente
+  const { timeSlots, availableTimeSlots, isLoading, hasAnyAvailableSlots } = useTimeSlotAvailability({
+    selectedDate,
+    durationMinutes,
+    excludeAppointmentId,
+    workingHours: { start: '08:00', end: '18:00' }
+  });
 
   const handleTimeSelect = (time: string) => {
     onChange(time);
@@ -98,9 +93,28 @@ export default function SmartTimePicker({
     return <Clock className="w-4 h-4 text-gray-400" />;
   };
 
-  const suggestedTimes = value && currentConflicts.hasConflicts 
-    ? getSuggestedTimes(value, 3) 
-    : [];
+  // Simple suggested times - next 3 available slots
+  const suggestedTimes = useMemo(() => {
+    if (!value || !currentConflicts.hasConflicts) return [];
+
+    const currentHour = parseInt(value.split(':')[0]);
+    const currentMinute = parseInt(value.split(':')[1]);
+    const currentTotalMinutes = currentHour * 60 + currentMinute;
+
+    const suggestions = [];
+    for (let i = 30; i <= 120; i += 30) { // Try 30min, 1h, 1.5h, 2h later
+      const newTotalMinutes = currentTotalMinutes + i;
+      const newHour = Math.floor(newTotalMinutes / 60);
+      const newMinute = newTotalMinutes % 60;
+
+      if (newHour < 18) { // Within working hours
+        const newTime = `${newHour.toString().padStart(2, '0')}:${newMinute.toString().padStart(2, '0')}`;
+        suggestions.push(newTime);
+        if (suggestions.length >= 3) break;
+      }
+    }
+    return suggestions;
+  }, [value, currentConflicts.hasConflicts]);
 
   return (
     <div className={cn("relative", className)}>
@@ -128,7 +142,7 @@ export default function SmartTimePicker({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="absolute right-8 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-100"
+                className="absolute right-8 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-100 dark:hover:bg-gray-700"
                 onClick={() => setIsOpen(!isOpen)}
                 disabled={disabled}
               >
@@ -154,12 +168,12 @@ export default function SmartTimePicker({
           </div>
 
           {isLoading ? (
-            <div className="p-4 text-center text-sm text-gray-500">
+            <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
               <Clock className="w-4 h-4 mx-auto mb-2 animate-pulse" />
               Carregando horários...
             </div>
           ) : !hasAnyAvailableSlots ? (
-            <div className="p-4 text-center text-sm text-gray-500">
+            <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
               <AlertTriangle className="w-4 h-4 mx-auto mb-2 text-amber-500" />
               Nenhum horário disponível para esta data
             </div>
@@ -169,7 +183,7 @@ export default function SmartTimePicker({
                 {/* Show suggested times first if there are conflicts */}
                 {suggestedTimes.length > 0 && (
                   <div className="mb-4">
-                    <div className="px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded mb-2">
+                    <div className="px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded mb-2">
                       Horários Sugeridos
                     </div>
                     <div className="grid grid-cols-3 gap-1">
@@ -178,7 +192,7 @@ export default function SmartTimePicker({
                           key={time}
                           variant="outline"
                           size="sm"
-                          className="h-8 text-xs border-blue-200 hover:bg-blue-50"
+                          className="h-8 text-xs border-blue-200 dark:border-blue-700/50 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                           onClick={() => handleTimeSelect(time)}
                         >
                           {time}
@@ -197,10 +211,10 @@ export default function SmartTimePicker({
                       size="sm"
                       className={cn(
                         "h-8 text-xs justify-start",
-                        slot.available 
-                          ? "hover:bg-green-50 border-green-200" 
-                          : "opacity-50 cursor-not-allowed text-gray-400",
-                        value === slot.time && "bg-blue-100 border-blue-300"
+                        slot.available
+                          ? "hover:bg-green-50 dark:hover:bg-green-900/20 border-green-200 dark:border-green-700/50"
+                          : "opacity-50 cursor-not-allowed text-gray-400 dark:text-gray-600",
+                        value === slot.time && "bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600"
                       )}
                       onClick={() => slot.available && handleTimeSelect(slot.time)}
                       disabled={!slot.available}
@@ -231,9 +245,9 @@ export default function SmartTimePicker({
                   </p>
                   <div className="space-y-1">
                     {currentConflicts.conflictingAppointments.slice(0, 2).map((apt, index) => (
-                      <div key={index} className="text-xs bg-white rounded px-2 py-1 border border-red-200">
-                        <div className="font-medium">{apt.title}</div>
-                        <div className="text-gray-600">
+                      <div key={index} className="text-xs bg-white dark:bg-gray-800/50 rounded px-2 py-1 border border-red-200 dark:border-red-700/50">
+                        <div className="font-medium text-gray-900 dark:text-gray-100">{apt.title}</div>
+                        <div className="text-gray-600 dark:text-gray-300">
                           {apt.startTime} - {apt.durationMinutes}min
                         </div>
                       </div>
@@ -260,7 +274,7 @@ export default function SmartTimePicker({
               Conflito
             </Badge>
           ) : value ? (
-            <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+            <Badge variant="secondary" className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
               <CheckCircle className="w-3 h-3 mr-1" />
               Disponível
             </Badge>

@@ -70,15 +70,15 @@ export default function ConflictWarningDialog({
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
       case 'scheduled':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
       case 'delayed':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
       case 'rescheduled':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 dark:bg-gray-700/50 text-gray-800 dark:text-gray-300';
     }
   };
 
@@ -115,15 +115,15 @@ export default function ConflictWarningDialog({
 
         <div className="space-y-6">
           {/* New Appointment Summary - Improved layout */}
-          <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-            <h4 className="font-semibold text-blue-900 mb-3 flex items-center gap-2 text-base">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-700/50 rounded-lg p-4">
+            <h4 className="font-semibold text-blue-900 dark:text-blue-300 mb-3 flex items-center gap-2 text-base">
               <Calendar className="w-5 h-5" />
               Novo Agendamento que Você Quer Criar
             </h4>
             <div className="space-y-3">
-              <div className="font-medium text-blue-800 text-base">{newAppointment.title}</div>
-              <div className="flex flex-wrap items-center gap-4 text-sm text-blue-700">
-                <div className="flex items-center gap-2 bg-blue-100 px-3 py-1 rounded-full">
+              <div className="font-medium text-blue-800 dark:text-blue-300 text-base">{newAppointment.title}</div>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-blue-700 dark:text-blue-400">
+                <div className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/30 px-3 py-1 rounded-full">
                   <Clock className="w-4 h-4" />
                   <span className="font-medium">{newAppointment.startTime} - {newEndTime}</span>
                 </div>
@@ -173,8 +173,8 @@ export default function ConflictWarningDialog({
 
                     {/* Description */}
                     {appointment.description && (
-                      <div className="mt-2 p-2 bg-white rounded border border-red-100">
-                        <p className="text-sm text-red-700 leading-relaxed">
+                      <div className="mt-2 p-2 bg-white dark:bg-gray-800/50 rounded border border-red-100 dark:border-red-700/50">
+                        <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed">
                           {appointment.description}
                         </p>
                       </div>

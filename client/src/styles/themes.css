@@ -334,11 +334,37 @@ body .text-theme-accent {
 
 /* Transição suave para mudança de tema */
 * {
-  transition: 
+  transition:
     background-color var(--transition-normal),
     color var(--transition-normal),
     border-color var(--transition-normal),
     box-shadow var(--transition-normal);
+}
+
+/* FORÇA MODAL A FICAR ESTÁTICO - SOLUÇÃO AGRESSIVA */
+[class*="fixed"][class*="inset-0"],
+.fixed.inset-0,
+div[style*="position: fixed"][style*="inset-0"],
+div[style*="position:fixed"][style*="inset-0"] {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  transform: none !important;
+  transition: none !important;
+  animation: none !important;
+  will-change: auto !important;
+}
+
+/* FORÇA CONTEÚDO DO MODAL A FICAR CENTRALIZADO */
+[class*="fixed"][class*="inset-0"] > div,
+.fixed.inset-0 > div {
+  position: relative !important;
+  transform: none !important;
+  transition: none !important;
+  animation: none !important;
+  will-change: auto !important;
 }
 
 /* Animação de entrada para elementos glass */
