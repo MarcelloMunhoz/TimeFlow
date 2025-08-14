@@ -1,5 +1,7 @@
 /* Importar sistema de temas modernos PRIMEIRO */
 @import './styles/themes.css';
+/* Importar estilos para renderização estável */
+@import './styles/stable-rendering.css';
 
 @tailwind base;
 @tailwind components;

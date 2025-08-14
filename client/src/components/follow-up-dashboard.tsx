@@ -16,6 +16,7 @@ import { ptBR } from "date-fns/locale";
 import EmailSettingsConfig from "./email-settings-config";
 import FollowUpSettingsDialog from "./follow-up-settings-dialog";
 import FollowUpReportViewer from "./follow-up-report-viewer";
+import FollowUpReportEditor from "./follow-up-report-editor";
 
 interface FollowUpSettings {
   id: number;
@@ -55,6 +56,7 @@ export default function FollowUpDashboard() {
   const [selectedSettings, setSelectedSettings] = useState<FollowUpSettings | null>(null);
   const [reportViewerOpen, setReportViewerOpen] = useState(false);
   const [selectedReportId, setSelectedReportId] = useState<number | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -202,6 +204,11 @@ export default function FollowUpDashboard() {
   const openReportViewer = (reportId: number) => {
     setSelectedReportId(reportId);
     setReportViewerOpen(true);
+  };
+
+  const openReportEditor = (reportId: number) => {
+    setSelectedReportId(reportId);
+    setEditorOpen(true);
   };
 
   const downloadReport = async (report: FollowUpReport) => {
@@ -524,6 +531,14 @@ Sistema de Gestão de Projetos BI
                         <Button
                           size="sm"
                           variant="outline"
+                          onClick={() => openReportEditor(report.id)}
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          Editar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
                           onClick={() => downloadReport(report)}
                         >
                           <Download className="w-4 h-4 mr-1" />
@@ -556,6 +571,16 @@ Sistema de Gestão de Projetos BI
         open={reportViewerOpen}
         onOpenChange={setReportViewerOpen}
         reportId={selectedReportId}
+      />
+
+      {/* Report Editor Dialog */}
+      <FollowUpReportEditor
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        reportId={selectedReportId}
+        onSend={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/follow-up-reports"] });
+        }}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'wouter';
 import { StatusFilter, TimeFilter } from '@/components/appointment-status-filter';
 import { getAppointmentStatus } from '@/lib/date-utils';
@@ -29,15 +29,23 @@ export function useAppointmentFilters({
   const [location, setLocation] = useLocation();
   
   // Parse URL parameters for initial state
-  const urlParams = new URLSearchParams(location.split('?')[1] || '');
-  const initialStatusFilter = (urlParams.get('status') as StatusFilter) || 'open';
-  const initialTimeFilter = (urlParams.get('period') as TimeFilter) || 'day';
+  const urlParams = useMemo(() => {
+    return new URLSearchParams(location.split('?')[1] || '');
+  }, [location]);
+  
+  const initialStatusFilter = useMemo(() => {
+    return (urlParams.get('status') as StatusFilter) || 'open';
+  }, [urlParams]);
+  
+  const initialTimeFilter = useMemo(() => {
+    return (urlParams.get('period') as TimeFilter) || 'day';
+  }, [urlParams]);
   
   const [statusFilter, setStatusFilterState] = useState<StatusFilter>(initialStatusFilter);
   const [timeFilter, setTimeFilterState] = useState<TimeFilter>(initialTimeFilter);
 
-  // Update URL when filters change
-  const updateURL = (status: StatusFilter, time: TimeFilter) => {
+  // Update URL when filters change - memoize to prevent unnecessary updates
+  const updateURL = useCallback((status: StatusFilter, time: TimeFilter) => {
     const params = new URLSearchParams();
     if (status !== 'open') params.set('status', status);
     if (time !== 'day') params.set('period', time);
@@ -49,19 +57,19 @@ export function useAppointmentFilters({
     if (newPath !== location) {
       setLocation(newPath);
     }
-  };
+  }, [location, setLocation]);
 
-  const setStatusFilter = (filter: StatusFilter) => {
+  const setStatusFilter = useCallback((filter: StatusFilter) => {
     setStatusFilterState(filter);
     updateURL(filter, timeFilter);
-  };
+  }, [timeFilter, updateURL]);
 
-  const setTimeFilter = (filter: TimeFilter) => {
+  const setTimeFilter = useCallback((filter: TimeFilter) => {
     setTimeFilterState(filter);
     updateURL(statusFilter, filter);
-  };
+  }, [statusFilter, updateURL]);
 
-  // Get date range based on time filter
+  // Get date range based on time filter - memoize to prevent recalculation
   const getDateRange = useMemo(() => {
     const baseDate = parseISO(selectedDate);
     
@@ -83,7 +91,7 @@ export function useAppointmentFilters({
     }
   }, [selectedDate, timeFilter]);
 
-  // Filter appointments by time period
+  // Filter appointments by time period - memoize to prevent unnecessary filtering
   const timeFilteredAppointments = useMemo(() => {
     return appointments.filter((appointment: any) => {
       const appointmentDate = parseISO(appointment.date);
@@ -96,7 +104,7 @@ export function useAppointmentFilters({
     });
   }, [appointments, selectedDate, timeFilter, getDateRange]);
 
-  // Calculate appointment counts
+  // Calculate appointment counts - memoize to prevent recalculation
   const appointmentCounts = useMemo(() => {
     const all = timeFilteredAppointments.length;
     

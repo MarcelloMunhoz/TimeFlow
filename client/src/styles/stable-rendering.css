@@ -1,0 +1,234 @@
+/* Estilos para estabilizar a renderização e evitar movimentos indesejados */
+
+/* Desabilitar transições que podem causar movimento */
+.task-list-stable {
+  transition: none !important;
+  transform: none !important;
+  animation: none !important;
+}
+
+/* Estabilizar posicionamento de modais */
+.modal-stable {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Estabilizar filtros de status */
+.status-filter-stable {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* Estabilizar botões de ação */
+.action-button-stable {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* Estabilizar indicadores de sobreposição */
+.overlap-indicator-stable {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* Estabilizar controles de timer */
+.timer-controls-stable {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* Estabilizar badges de status */
+.status-badge-stable {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* Estabilizar ícones */
+.icon-stable {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* Estabilizar campos de formulário */
+.form-field-stable {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* Estabilizar dropdowns */
+.dropdown-stable {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* Estabilizar tooltips */
+.tooltip-stable {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* Estabilizar scroll */
+.scroll-stable {
+  scroll-behavior: auto !important;
+}
+
+/* Estabilizar hover effects */
+.hover-stable:hover {
+  transform: none !important;
+  transition: none !important;
+}
+
+/* Estabilizar focus effects */
+.focus-stable:focus {
+  transform: none !important;
+  transition: none !important;
+}
+
+/* Estabilizar active effects */
+.active-stable:active {
+  transform: none !important;
+  transition: none !important;
+}
+
+/* Estabilizar animações de entrada/saída */
+.enter-exit-stable {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Estabilizar posicionamento absoluto */
+.absolute-stable {
+  position: absolute !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+}
+
+/* Estabilizar posicionamento relativo */
+.relative-stable {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+}
+
+/* Estabilizar flexbox */
+.flex-stable {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Estabilizar grid */
+.grid-stable {
+  display: grid !important;
+  grid-template-columns: auto !important;
+  grid-template-rows: auto !important;
+}
+
+/* Estabilizar margens e paddings */
+.spacing-stable {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Estabilizar bordas */
+.border-stable {
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+/* Estabilizar sombras */
+.shadow-stable {
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* Estabilizar cores */
+.color-stable {
+  color: inherit !important;
+  background-color: inherit !important;
+  border-color: inherit !important;
+}
+
+/* Estabilizar tamanhos */
+.size-stable {
+  width: auto !important;
+  height: auto !important;
+  min-width: auto !important;
+  min-height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+/* Estabilizar overflow */
+.overflow-stable {
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+}
+
+/* Estabilizar z-index */
+.z-index-stable {
+  z-index: auto !important;
+}
+
+/* Estabilizar visibilidade */
+.visibility-stable {
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: block !important;
+}
+
+/* Estabilizar cursor */
+.cursor-stable {
+  cursor: default !important;
+}
+
+/* Estabilizar pointer events */
+.pointer-events-stable {
+  pointer-events: auto !important;
+}
+
+/* Estabilizar user select */
+.user-select-stable {
+  user-select: auto !important;
+  -webkit-user-select: auto !important;
+  -moz-user-select: auto !important;
+  -ms-user-select: auto !important;
+}
+
+/* Estabilizar resize */
+.resize-stable {
+  resize: none !important;
+}
+
+/* Estabilizar outline */
+.outline-stable {
+  outline: none !important;
+}
+
+/* Estabilizar focus ring */
+.focus-ring-stable:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Estabilizar hover ring */
+.hover-ring-stable:hover {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Estabilizar active ring */
+.active-ring-stable:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+

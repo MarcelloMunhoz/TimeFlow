@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { Button } from './button';
 
@@ -12,6 +12,7 @@ interface CustomModalProps {
 
 export function CustomModal({ isOpen, onClose, title, children, className = "" }: CustomModalProps) {
   const isClosingRef = useRef(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   // Handle escape key and body scroll (optimized)
   useEffect(() => {
@@ -43,10 +44,38 @@ export function CustomModal({ isOpen, onClose, title, children, className = "" }
     };
   }, [isOpen, onClose]);
 
+  // Memoize close handler to prevent re-creation
+  const handleClose = useCallback(() => {
+    if (!isClosingRef.current) {
+      isClosingRef.current = true;
+      onClose();
+      setTimeout(() => {
+        isClosingRef.current = false;
+      }, 100);
+    }
+  }, [onClose]);
+
+  // Memoize backdrop click handler
+  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && !isClosingRef.current) {
+      isClosingRef.current = true;
+      onClose();
+      setTimeout(() => {
+        isClosingRef.current = false;
+      }, 100);
+    }
+  }, [onClose]);
+
+  // Memoize content click handler
+  const handleContentClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
   if (!isOpen) return null;
 
   return (
     <div
+      ref={modalRef}
       className="fixed inset-0 z-50 bg-black bg-opacity-50"
       style={{
         display: 'flex',
@@ -58,15 +87,7 @@ export function CustomModal({ isOpen, onClose, title, children, className = "" }
         transform: 'none',
         animation: 'none'
       }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !isClosingRef.current) {
-          isClosingRef.current = true;
-          onClose();
-          setTimeout(() => {
-            isClosingRef.current = false;
-          }, 100);
-        }
-      }}
+      onClick={handleBackdropClick}
     >
       <div
         className={`bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-4xl max-h-[95vh] flex flex-col ${className}`}
@@ -76,9 +97,14 @@ export function CustomModal({ isOpen, onClose, title, children, className = "" }
           transform: 'none',
           animation: 'none',
           position: 'relative',
-          margin: '0 auto'
+          margin: '0 auto',
+          // Ensure consistent positioning
+          top: '0',
+          left: '0',
+          right: '0',
+          bottom: '0'
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={handleContentClick}
       >
         {/* Header - Fixed */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
@@ -86,16 +112,7 @@ export function CustomModal({ isOpen, onClose, title, children, className = "" }
           <Button
             variant="ghost"
             size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isClosingRef.current) {
-                isClosingRef.current = true;
-                onClose();
-                setTimeout(() => {
-                  isClosingRef.current = false;
-                }, 100);
-              }
-            }}
+            onClick={handleClose}
             className="h-8 w-8 p-0 flex-shrink-0 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <X className="h-4 w-4" />

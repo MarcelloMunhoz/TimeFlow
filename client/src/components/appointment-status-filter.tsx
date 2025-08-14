@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -70,165 +70,134 @@ export default function AppointmentStatusFilter({
 }: AppointmentStatusFilterProps) {
   const [showMobileFilter, setShowMobileFilter] = useState(false);
 
+  // Memoize status filter buttons to prevent re-renders
+  const statusFilterButtons = useMemo(() => {
+    return Object.entries(STATUS_FILTER_CONFIG).map(([key, config]) => {
+      const Icon = config.icon;
+      const isActive = statusFilter === key;
+      const count = appointmentCounts?.[key as keyof typeof appointmentCounts] || 0;
+      
+      return (
+        <Button
+          key={key}
+          variant="outline"
+          size="sm"
+          onClick={() => onStatusFilterChange(key as StatusFilter)}
+          className={cn(
+            "transition-all duration-200 status-filter-stable",
+            isActive ? config.activeColor : config.color
+          )}
+          title={config.description}
+        >
+          <Icon className="w-4 h-4 mr-2 icon-stable" />
+          {config.label}
+          {appointmentCounts && (
+            <Badge 
+              variant="secondary" 
+              className="ml-2 bg-white/80 text-gray-700 dark:bg-gray-800/80 dark:text-gray-300 status-badge-stable"
+            >
+              {count}
+            </Badge>
+          )}
+        </Button>
+      );
+    });
+  }, [statusFilter, appointmentCounts, onStatusFilterChange]);
+
+  // Memoize time filter options to prevent re-renders
+  const timeFilterOptions = useMemo(() => {
+    return Object.entries(TIME_FILTER_CONFIG).map(([key, config]) => (
+      <SelectItem key={key} value={key}>
+        {config.label}
+      </SelectItem>
+    ));
+  }, []);
+
+  // Memoize mobile filter toggle to prevent re-renders
+  const toggleMobileFilter = useCallback(() => {
+    setShowMobileFilter(prev => !prev);
+  }, []);
+
   return (
-    <div className={cn("space-y-4", className)}>
+    <div className={cn("space-y-4 status-filter-stable", className)}>
       {/* Desktop Filter Controls */}
       <div className="hidden md:flex items-center justify-between">
         {/* Status Filter Buttons */}
         <div className="flex items-center space-x-2">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mr-2">Status:</span>
-          {Object.entries(STATUS_FILTER_CONFIG).map(([key, config]) => {
-            const Icon = config.icon;
-            const isActive = statusFilter === key;
-            const count = appointmentCounts?.[key as keyof typeof appointmentCounts] || 0;
-            
-            return (
-              <Button
-                key={key}
-                variant="outline"
-                size="sm"
-                onClick={() => onStatusFilterChange(key as StatusFilter)}
-                className={cn(
-                  "transition-all duration-200",
-                  isActive ? config.activeColor : config.color
-                )}
-                title={config.description}
-              >
-                <Icon className="w-4 h-4 mr-2" />
-                {config.label}
-                {appointmentCounts && (
-                  <Badge 
-                    variant="secondary" 
-                    className={cn(
-                      "ml-2 text-xs",
-                      isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-300"
-                    )}
-                  >
-                    {count}
-                  </Badge>
-                )}
-              </Button>
-            );
-          })}
+          {statusFilterButtons}
         </div>
 
-        {/* Time Period Filter */}
+        {/* Time Filter */}
         <div className="flex items-center space-x-2">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Período:</span>
           <Select value={timeFilter} onValueChange={onTimeFilterChange}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-24 dropdown-stable">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
-              {Object.entries(TIME_FILTER_CONFIG).map(([key, config]) => (
-                <SelectItem key={key} value={key}>
-                  <div className="flex items-center">
-                    <Calendar className="w-4 h-4 mr-2" />
-                    {config.label}
-                  </div>
-                </SelectItem>
-              ))}
+            <SelectContent className="dropdown-stable">
+              {timeFilterOptions}
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {/* Mobile Filter Controls */}
+      {/* Mobile Filter Toggle */}
       <div className="md:hidden">
         <Button
           variant="outline"
-          onClick={() => setShowMobileFilter(!showMobileFilter)}
-          className="w-full justify-between"
+          size="sm"
+          onClick={toggleMobileFilter}
+          className="w-full flex items-center justify-center space-x-2 action-button-stable"
         >
-          <div className="flex items-center">
-            <Filter className="w-4 h-4 mr-2" />
-            Filtros
-          </div>
-          <Badge variant="secondary" className="ml-2">
-            {STATUS_FILTER_CONFIG[statusFilter].label} • {TIME_FILTER_CONFIG[timeFilter].label}
-          </Badge>
+          <Filter className="w-4 h-4 icon-stable" />
+          <span>Filtros</span>
+          {appointmentCounts && (
+            <Badge variant="secondary" className="ml-auto status-badge-stable">
+              {appointmentCounts.all}
+            </Badge>
+          )}
         </Button>
-
-        {showMobileFilter && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-4">
-            {/* Mobile Status Filter */}
-            <div>
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">Status</label>
-              <div className="grid grid-cols-3 gap-2">
-                {Object.entries(STATUS_FILTER_CONFIG).map(([key, config]) => {
-                  const Icon = config.icon;
-                  const isActive = statusFilter === key;
-                  const count = appointmentCounts?.[key as keyof typeof appointmentCounts] || 0;
-                  
-                  return (
-                    <Button
-                      key={key}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onStatusFilterChange(key as StatusFilter)}
-                      className={cn(
-                        "flex-col h-auto py-3 transition-all duration-200",
-                        isActive ? config.activeColor : config.color
-                      )}
-                    >
-                      <Icon className="w-4 h-4 mb-1" />
-                      <span className="text-xs">{config.label}</span>
-                      {appointmentCounts && (
-                        <Badge 
-                          variant="secondary" 
-                          className={cn(
-                            "mt-1 text-xs",
-                            isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-300"
-                          )}
-                        >
-                          {count}
-                        </Badge>
-                      )}
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Mobile Time Filter */}
-            <div>
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">Período</label>
-              <Select value={timeFilter} onValueChange={onTimeFilterChange}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(TIME_FILTER_CONFIG).map(([key, config]) => (
-                    <SelectItem key={key} value={key}>
-                      <div className="flex items-center">
-                        <Calendar className="w-4 h-4 mr-2" />
-                        {config.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Filter Summary */}
-      {appointmentCounts && (
-        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 px-4 py-2 rounded-lg">
-          <span>
-            Mostrando <strong>{appointmentCounts[statusFilter]}</strong> agendamentos 
-            {statusFilter !== 'all' && ` ${STATUS_FILTER_CONFIG[statusFilter].label.toLowerCase()}`}
-            {' '}para {TIME_FILTER_CONFIG[timeFilter].label.toLowerCase()}
-          </span>
-          {statusFilter === 'open' && appointmentCounts.open > 0 && (
-            <div className="flex items-center text-amber-600">
-              <AlertTriangle className="w-4 h-4 mr-1" />
-              <span className="text-xs font-medium">
-                {appointmentCounts.open} pendente{appointmentCounts.open !== 1 ? 's' : ''}
-              </span>
+      {/* Mobile Filter Panel */}
+      {showMobileFilter && (
+        <div className="md:hidden space-y-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg status-filter-stable">
+          {/* Status Filters */}
+          <div>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">Status:</span>
+            <div className="grid grid-cols-1 gap-2">
+              {statusFilterButtons}
             </div>
-          )}
+          </div>
+
+          {/* Time Filter */}
+          <div>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">Período:</span>
+            <Select value={timeFilter} onValueChange={onTimeFilterChange}>
+              <SelectTrigger className="w-full dropdown-stable">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="dropdown-stable">
+                {timeFilterOptions}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+
+      {/* Summary Text */}
+      {appointmentCounts && (
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          {(() => {
+            const { all, open, completed } = appointmentCounts;
+            const statusText = statusFilter === 'all' ? 'todos' : 
+                              statusFilter === 'open' ? 'pendentes' : 'concluídos';
+            const timeText = timeFilter === 'day' ? 'dia' : 
+                           timeFilter === 'week' ? 'semana' : 'mês';
+            
+            return `Mostrando ${statusFilter === 'all' ? all : statusFilter === 'open' ? open : completed} agendamentos ${statusText} para ${timeText}`;
+          })()}
         </div>
       )}
     </div>

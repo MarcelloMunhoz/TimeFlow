@@ -15,7 +15,7 @@ export default function AppointmentOverlapIndicator({
   overlappingAppointments,
   className
 }: AppointmentOverlapIndicatorProps) {
-  if (overlappingAppointments.length === 0) {
+  if (!overlappingAppointments || overlappingAppointments.length === 0) {
     return null;
   }
 
@@ -28,18 +28,18 @@ export default function AppointmentOverlapIndicator({
           <Badge 
             variant="secondary" 
             className={cn(
-              "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 cursor-help transition-all duration-300 ease-in-out",
+              "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 cursor-help transition-all duration-300 ease-in-out overlap-indicator-stable",
               className
             )}
           >
-            <Layers className="w-3 h-3 mr-1" />
+            <Layers className="w-3 h-3 mr-1 icon-stable" />
             Encaixe ({overlappingAppointments.length})
           </Badge>
         </TooltipTrigger>
-        <TooltipContent className="max-w-sm">
+        <TooltipContent className="max-w-sm tooltip-stable">
           <div className="space-y-2">
-            <div className="font-medium text-sm flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+              <AlertTriangle className="w-4 h-4 text-amber-500 icon-stable" />
               Agendamentos Sobrepostos
             </div>
             
@@ -57,7 +57,7 @@ export default function AppointmentOverlapIndicator({
                       {overlapping.title}
                     </div>
                     <div className="flex items-center gap-2 text-gray-600">
-                      <Clock className="w-3 h-3" />
+                      <Clock className="w-3 h-3 icon-stable" />
                       <span>{overlapping.startTime} - {overlappingEndTime}</span>
                       <span>({overlapping.durationMinutes}min)</span>
                     </div>

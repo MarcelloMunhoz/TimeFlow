@@ -162,16 +162,18 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       // Reset for new appointment
       form.reset(initialValues);
     }
-  }, [editingAppointment?.id, open]); // Only depend on appointment ID and modal open state
+  }, [editingAppointment?.id, open, form, initialValues]); // Include form and initialValues in dependencies
 
   // Watch the selected company to filter projects
   const selectedCompanyId = form.watch("companyId");
   const selectedProjectId = form.watch("projectId");
 
   // Filter projects based on selected company
-  const filteredProjects = selectedCompanyId && selectedCompanyId !== "none"
-    ? (projects as any[]).filter((project: any) => project.companyId === parseInt(selectedCompanyId))
-    : projects;
+  const filteredProjects = useMemo(() => {
+    return selectedCompanyId && selectedCompanyId !== "none"
+      ? (projects as any[]).filter((project: any) => project.companyId === parseInt(selectedCompanyId))
+      : projects;
+  }, [selectedCompanyId, projects]);
 
   // Fetch phases for the selected project
   const { data: projectPhases = [] } = useQuery({
@@ -198,7 +200,7 @@ export default function AppointmentForm({ open, onOpenChange, defaultDate, editi
       }
       // If company is set to "none", keep the project selection (show all projects scenario)
     }
-  }, [selectedCompanyId, projects]); // Removed 'form' to prevent infinite loops
+  }, [selectedCompanyId, projects, form]);
 
   // Effect to clear phase selection when project changes
   useEffect(() => {

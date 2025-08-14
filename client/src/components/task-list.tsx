@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 // Removed ModernCard imports - using direct CSS classes like personalization tab
 // Removed Button import - using pattern-aware buttons
 import { Badge } from "@/components/ui/badge";
@@ -73,7 +73,9 @@ export default function TaskList({
   const queryClient = useQueryClient();
   // Usar o mesmo padrão exato da aba de personalização
   const { designPattern, getButtonClasses } = useTheme();
-  const getCardClasses = () => {
+  
+  // Memoize card classes to prevent re-renders
+  const getCardClasses = useCallback(() => {
     if (designPattern === 'neomorphism') {
       return 'neo-card';
     }
@@ -81,20 +83,23 @@ export default function TaskList({
       return 'glass-card';
     }
     return 'bg-theme-secondary border border-gray-200 shadow-sm';
-  };
+  }, [designPattern]);
+
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
-  const [forceRender, setForceRender] = useState(0);
-  const [isEditModalTransitioning, setIsEditModalTransitioning] = useState(false);
+  
+  // Remove forceRender and isEditModalTransitioning to prevent unnecessary re-renders
+  // const [forceRender, setForceRender] = useState(0);
+  // const [isEditModalTransitioning, setIsEditModalTransitioning] = useState(false);
 
-  // Force re-render when selectedDate changes
-  useEffect(() => {
-    console.log('TaskList - useEffect triggered, selectedDate changed to:', selectedDate);
-    setForceRender(prev => prev + 1);
-  }, [selectedDate]);
+  // Remove useEffect that was causing re-renders
+  // useEffect(() => {
+  //   console.log('TaskList - useEffect triggered, selectedDate changed to:', selectedDate);
+  //   setForceRender(prev => prev + 1);
+  // }, [selectedDate]);
 
   const { data: allAppointments = [], isLoading } = useQuery({
     queryKey: ['/api/appointments'],
@@ -113,8 +118,8 @@ export default function TaskList({
     queryKey: ['/api/users'],
   });
 
-  // Helper functions to get related data
-  const getCompanyName = (appointment: any) => {
+  // Memoize helper functions to prevent re-creation on every render
+  const getCompanyName = useCallback((appointment: any) => {
     console.log('getCompanyName - appointment:', appointment.id, 'companyId:', appointment.companyId, 'company:', appointment.company);
     if (appointment.companyId) {
       const company = (companies as any[]).find((c: any) => c.id === appointment.companyId);
@@ -122,9 +127,9 @@ export default function TaskList({
       return company?.name;
     }
     return appointment.company; // fallback to legacy field
-  };
+  }, [companies]);
 
-  const getProjectName = (appointment: any) => {
+  const getProjectName = useCallback((appointment: any) => {
     console.log('getProjectName - appointment:', appointment.id, 'projectId:', appointment.projectId, 'project:', appointment.project);
     if (appointment.projectId) {
       const project = (projects as any[]).find((p: any) => p.id === appointment.projectId);
@@ -132,9 +137,9 @@ export default function TaskList({
       return project?.name;
     }
     return appointment.project; // fallback to legacy field
-  };
+  }, [projects]);
 
-  const getAssignedUserName = (appointment: any) => {
+  const getAssignedUserName = useCallback((appointment: any) => {
     console.log('getAssignedUserName - appointment:', appointment.id, 'assignedUserId:', appointment.assignedUserId);
     if (appointment.assignedUserId) {
       const user = (users as any[]).find((u: any) => u.id === appointment.assignedUserId);
@@ -142,7 +147,7 @@ export default function TaskList({
       return user?.name;
     }
     return null;
-  };
+  }, [users]);
 
   // Use the appointment filters hook
   const {
@@ -166,34 +171,36 @@ export default function TaskList({
   // Detect overlapping appointments
   const { appointmentsWithOverlaps, getOverlappingAppointments } = useAppointmentOverlaps(allAppointments as any[]);
 
-  // Apply legacy filters to the already filtered appointments
-  const appointments = filteredAppointments.filter((appointment: any) => {
-    // Project filter
-    if (filters.project && filters.project !== 'all' && appointment.project !== filters.project) {
-      return false;
-    }
-
-    // Company filter
-    if (filters.company && filters.company !== 'all' && appointment.company !== filters.company) {
-      return false;
-    }
-
-    // SLA Status filter
-    if (filters.slaStatus && filters.slaStatus !== 'all') {
-      const slaExpired = isSLAExpired(appointment);
-      if (filters.slaStatus === 'within' && (slaExpired || !appointment.slaMinutes)) {
+  // Memoize filtered appointments to prevent unnecessary re-filtering
+  const appointments = useMemo(() => {
+    return filteredAppointments.filter((appointment: any) => {
+      // Project filter
+      if (filters.project && filters.project !== 'all' && appointment.project !== filters.project) {
         return false;
       }
-      if (filters.slaStatus === 'expired' && !slaExpired) {
-        return false;
-      }
-      if (filters.slaStatus === 'none' && appointment.slaMinutes) {
-        return false;
-      }
-    }
 
-    return true;
-  });
+      // Company filter
+      if (filters.company && filters.company !== 'all' && appointment.company !== filters.company) {
+        return false;
+      }
+
+      // SLA Status filter
+      if (filters.slaStatus && filters.slaStatus !== 'all') {
+        const slaExpired = isSLAExpired(appointment);
+        if (filters.slaStatus === 'within' && (slaExpired || !appointment.slaMinutes)) {
+          return false;
+        }
+        if (filters.slaStatus === 'expired' && !slaExpired) {
+          return false;
+        }
+        if (filters.slaStatus === 'none' && appointment.slaMinutes) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [filteredAppointments, filters.project, filters.company, filters.slaStatus]);
 
   const completeTaskMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -285,14 +292,14 @@ export default function TaskList({
     }
   });
 
-  const handleReschedule = (appointment: any) => {
+  const handleReschedule = useCallback((appointment: any) => {
     setSelectedAppointment(appointment);
     setRescheduleDate(appointment.date);
     setRescheduleTime(appointment.startTime);
     setShowRescheduleModal(true);
-  };
+  }, []);
 
-  const confirmReschedule = () => {
+  const confirmReschedule = useCallback(() => {
     if (!selectedAppointment || !rescheduleDate || !rescheduleTime) return;
     
     rescheduleTaskMutation.mutate({
@@ -300,25 +307,15 @@ export default function TaskList({
       date: rescheduleDate,
       startTime: rescheduleTime
     });
-  };
+  }, [selectedAppointment, rescheduleDate, rescheduleTime, rescheduleTaskMutation]);
 
-  const handleEdit = (appointment: any) => {
-    // Prevent rapid clicking that could cause modal instability
-    if (isEditModalTransitioning) {
-      return;
-    }
-
-    setIsEditModalTransitioning(true);
+  const handleEdit = useCallback((appointment: any) => {
+    // Simplified edit handling without transition states
     setSelectedAppointment(appointment);
     setShowEditModal(true);
+  }, []);
 
-    // Reset transition flag after a short delay
-    setTimeout(() => {
-      setIsEditModalTransitioning(false);
-    }, 300);
-  };
-
-  const handleEditModalClose = (open: boolean) => {
+  const handleEditModalClose = useCallback((open: boolean) => {
     if (!open) {
       setShowEditModal(false);
       // Clear selected appointment after modal closes to prevent stale data
@@ -326,7 +323,7 @@ export default function TaskList({
         setSelectedAppointment(null);
       }, 100);
     }
-  };
+  }, []);
 
   if (isLoading) {
     return (
@@ -337,7 +334,7 @@ export default function TaskList({
   }
 
   return (
-    <div key={`task-list-${selectedDate}-${forceRender}`} className={`${getCardClasses()} rounded-lg transition-all duration-300 hover:shadow-lg hover:-translate-y-1`}>
+    <div className={`${getCardClasses()} rounded-lg task-list-stable hover:shadow-lg hover:-translate-y-1`}>
       <div className="p-6 border-b border-theme-muted">
         <h3 className="text-lg font-semibold text-theme-primary">
           Agendamentos
@@ -345,7 +342,7 @@ export default function TaskList({
       </div>
 
       {showStatusFilter && (
-        <div className="px-6 pb-4">
+        <div className="px-6 pb-4 status-filter-stable">
           <AppointmentStatusFilter
             statusFilter={currentStatusFilter}
             timeFilter={currentTimeFilter}
@@ -377,12 +374,12 @@ export default function TaskList({
               <div
                 key={appointment.id}
                 className={cn(
-                  "flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors duration-300 ease-in-out",
+                  "flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/30 task-list-stable",
                   config.color
                 )}
               >
                 <div className="flex-shrink-0 mt-1">
-                  <div className={cn("w-3 h-3 rounded-full", config.dotColor)} />
+                  <div className={cn("w-3 h-3 rounded-full icon-stable", config.dotColor)} />
                 </div>
                 
                 <div className="flex-1 min-w-0">
@@ -395,7 +392,7 @@ export default function TaskList({
                           </p>
                           {appointment.isRecurring && (
                             <div className="flex items-center gap-1">
-                              <Repeat className="w-3 h-3 text-blue-500" />
+                              <Repeat className="w-3 h-3 text-blue-500 icon-stable" />
                               <span className="text-xs text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">
                                 {appointment.recurrencePattern === 'daily' && 'Diário'}
                                 {appointment.recurrencePattern === 'weekly' && 'Semanal'}
@@ -406,7 +403,7 @@ export default function TaskList({
                           )}
                           {appointment.recurringTaskId && !appointment.isRecurringTemplate && (
                             <div className="flex items-center gap-1">
-                              <Link className="w-3 h-3 text-green-500" />
+                              <Link className="w-3 h-3 text-green-500 icon-stable" />
                               <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">
                                 Instância
                               </span>
@@ -427,19 +424,19 @@ export default function TaskList({
                       <div className="mt-2 space-y-1">
                         {getCompanyName(appointment) && (
                           <div className="flex items-center text-xs text-gray-600 dark:text-gray-300">
-                            <Building2 className="w-3 h-3 mr-1 text-blue-500" />
+                            <Building2 className="w-3 h-3 mr-1 text-blue-500 icon-stable" />
                             <span>{getCompanyName(appointment)}</span>
                           </div>
                         )}
                         {getProjectName(appointment) && (
                           <div className="flex items-center text-xs text-gray-600 dark:text-gray-300">
-                            <FolderOpen className="w-3 h-3 mr-1 text-green-500" />
+                            <FolderOpen className="w-3 h-3 mr-1 text-green-500 icon-stable" />
                             <span>{getProjectName(appointment)}</span>
                           </div>
                         )}
                         {getAssignedUserName(appointment) && (
                           <div className="flex items-center text-xs text-gray-600 dark:text-gray-300">
-                            <User className="w-3 h-3 mr-1 text-purple-500" />
+                            <User className="w-3 h-3 mr-1 text-purple-500 icon-stable" />
                             <span>{getAssignedUserName(appointment)}</span>
                           </div>
                         )}
@@ -453,7 +450,7 @@ export default function TaskList({
                     
                     <div className="flex items-center space-x-2 ml-4">
                       {appointment.slaMinutes && (
-                        <Badge variant="outline" className={slaExpired ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>
+                        <Badge variant="outline" className={cn(slaExpired ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700', 'status-badge-stable')}>
                           {slaExpired ? 'SLA Vencido' : `SLA: ${Math.round(appointment.slaMinutes / 60)}h`}
                         </Badge>
                       )}
@@ -461,7 +458,7 @@ export default function TaskList({
                       <div className="flex space-x-1">
                         {appointment.status !== 'completed' && !appointment.isPomodoro && (
                           <button
-                            className={`${getButtonClasses('ghost')} p-1 h-6 w-6 flex items-center justify-center`}
+                            className={`${getButtonClasses('secondary')} p-1 h-6 w-6 flex items-center justify-center action-button-stable`}
                             onClick={() => {
                               console.log("Marcando como concluído:", appointment.id);
                               completeTaskMutation.mutate(appointment.id);
@@ -469,31 +466,31 @@ export default function TaskList({
                             disabled={completeTaskMutation.isPending}
                             title="Marcar como concluído"
                           >
-                            <Check className="w-3 h-3 text-green-600" />
+                            <Check className="w-3 h-3 text-green-600 icon-stable" />
                           </button>
                         )}
 
                         {appointment.status === 'scheduled' && !appointment.isPomodoro && (
                           <button
-                            className={`${getButtonClasses('ghost')} p-1 h-6 w-6 flex items-center justify-center`}
+                            className={`${getButtonClasses('secondary')} p-1 h-6 w-6 flex items-center justify-center action-button-stable`}
                             onClick={() => handleReschedule(appointment)}
                             disabled={rescheduleTaskMutation.isPending}
                             title="Reagendar"
                           >
-                            <Clock className="w-3 h-3 text-theme-secondary" />
+                            <Clock className="w-3 h-3 text-theme-secondary icon-stable" />
                           </button>
                         )}
 
                         <button
-                          className={`${getButtonClasses('ghost')} p-1 h-6 w-6 flex items-center justify-center`}
+                          className={`${getButtonClasses('secondary')} p-1 h-6 w-6 flex items-center justify-center action-button-stable`}
                           onClick={() => handleEdit(appointment)}
                           title="Editar"
                         >
-                          <Edit className="w-3 h-3 text-theme-secondary" />
+                          <Edit className="w-3 h-3 text-theme-secondary icon-stable" />
                         </button>
                         
                         <button
-                          className={`${getButtonClasses('ghost')} p-1 h-6 w-6 flex items-center justify-center`}
+                          className={`${getButtonClasses('secondary')} p-1 h-6 w-6 flex items-center justify-center action-button-stable`}
                           onClick={() => {
                             console.log(`🗑️ User clicked delete for appointment: ${appointment.id} - "${appointment.title}"`);
 
@@ -547,7 +544,7 @@ export default function TaskList({
                           disabled={deleteTaskMutation.isPending}
                           title="Excluir tarefa"
                         >
-                          <Trash2 className={`w-3 h-3 ${deleteTaskMutation.isPending ? 'text-gray-400' : 'text-red-500'}`} />
+                          <Trash2 className={`w-3 h-3 ${deleteTaskMutation.isPending ? 'text-gray-400' : 'text-red-500'} icon-stable`} />
                         </button>
                       </div>
                     </div>
@@ -556,7 +553,7 @@ export default function TaskList({
                   <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
                       <span>
-                        <Clock className="w-3 h-3 inline mr-1" />
+                        <Clock className="w-3 h-3 inline mr-1 icon-stable" />
                         {appointment.startTime} - {appointment.endTime}
                       </span>
                       <span>
@@ -565,8 +562,8 @@ export default function TaskList({
                           / {Math.round(appointment.durationMinutes / 60 * 10) / 10}h
                         </span>
                       </span>
-                      <Badge variant={status === 'completed' ? 'default' : 'secondary'} className={config.badgeColor}>
-                        <StatusIcon className="w-3 h-3 mr-1" />
+                      <Badge variant={status === 'completed' ? 'default' : 'secondary'} className={cn(config.badgeColor, 'status-badge-stable')}>
+                        <StatusIcon className="w-3 h-3 mr-1 icon-stable" />
                         {config.label}
                       </Badge>
 
@@ -584,7 +581,7 @@ export default function TaskList({
                     <TimerControls
                       appointmentId={appointment.id}
                       compact={true}
-                      className="ml-auto"
+                      className="ml-auto timer-controls-stable"
                     />
                   </div>
                 </div>
@@ -596,7 +593,7 @@ export default function TaskList({
       
       {/* Reschedule Modal */}
       <Dialog open={showRescheduleModal} onOpenChange={setShowRescheduleModal}>
-        <DialogContent>
+        <DialogContent className="modal-stable">
           <DialogHeader>
             <DialogTitle>Reagendar Tarefa</DialogTitle>
           </DialogHeader>
@@ -608,6 +605,7 @@ export default function TaskList({
                 type="date"
                 value={rescheduleDate}
                 onChange={(e) => setRescheduleDate(e.target.value)}
+                className="form-field-stable"
               />
             </div>
             <div>
@@ -617,17 +615,18 @@ export default function TaskList({
                 type="time"
                 value={rescheduleTime}
                 onChange={(e) => setRescheduleTime(e.target.value)}
+                className="form-field-stable"
               />
             </div>
             <div className="flex space-x-2 pt-4">
               <button
-                className={`${getButtonClasses('outline')} flex items-center justify-center`}
+                className={`${getButtonClasses('outline')} flex items-center justify-center action-button-stable`}
                 onClick={() => setShowRescheduleModal(false)}
               >
                 Cancelar
               </button>
               <button
-                className={`${getButtonClasses('primary')} flex items-center justify-center`}
+                className={`${getButtonClasses('primary')} flex items-center justify-center action-button-stable`}
                 onClick={confirmReschedule}
                 disabled={rescheduleTaskMutation.isPending || !rescheduleDate || !rescheduleTime}
               >
