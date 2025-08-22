@@ -899,6 +899,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all subphases for a project (across all phases)
+  app.get("/api/projects/:projectId/subphases", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      console.log(`🔍 Fetching subphases for project ${projectId}`);
+      
+      const projectSubphases = await storage.getProjectSubphasesByProject(parseInt(projectId));
+      console.log(`✅ Found ${projectSubphases.length} subphases for project ${projectId}`);
+      
+      res.json(projectSubphases);
+    } catch (error) {
+      console.error("Error fetching project subphases:", error);
+      res.status(500).json({ message: "Failed to fetch project subphases" });
+    }
+  });
+
+  // ===== DAILY SCHEDULE EXPORT =====
+
+  // Get daily schedule for export
+  app.get("/api/schedule/daily/:date", async (req, res) => {
+    try {
+      const { date } = req.params;
+      console.log(`📅 Fetching daily schedule for ${date}`);
+      
+      const dailySchedule = await storage.getDailyScheduleForExport(date);
+      console.log(`✅ Found ${dailySchedule.appointments.length} appointments for ${date}`);
+      
+      res.json(dailySchedule);
+    } catch (error) {
+      console.error("Error fetching daily schedule:", error);
+      res.status(500).json({ message: "Failed to fetch daily schedule" });
+    }
+  });
+
+  // Export daily schedule as formatted text
+  app.get("/api/schedule/export/:date", async (req, res) => {
+    try {
+      const { date } = req.params;
+      const { format = 'text' } = req.query;
+      
+      console.log(`📄 Exporting daily schedule for ${date} in ${format} format`);
+      
+      const exportData = await storage.exportDailySchedule(date, format as string);
+      
+      if (format === 'text') {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="cronograma-${date}.txt"`);
+        res.send(exportData);
+      } else {
+        res.json(exportData);
+      }
+    } catch (error) {
+      console.error("Error exporting daily schedule:", error);
+      res.status(500).json({ message: "Failed to export daily schedule" });
+    }
+  });
+
   // Link appointment to project subphase
   app.post("/api/appointments/:appointmentId/link-subphase", async (req, res) => {
     try {

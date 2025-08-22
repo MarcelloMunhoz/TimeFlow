@@ -9,11 +9,12 @@ import ProjectsManagement from "@/components/projects-management";
 import UsersManagement from "@/components/users-management";
 import PhasesManagement from "@/components/phases-management";
 import SubphasesManagement from "@/components/subphases-management";
+import ProjectSubphasesDates from "@/components/project-subphases-dates";
 import ProjectKPIsDashboard from "@/components/project-kpis-dashboard";
 import FollowUpDashboard from "@/components/follow-up-dashboard";
 import ThemeController from "@/components/theme-controller";
 import { useTheme } from "@/hooks/use-theme";
-import { Building2, FolderOpen, Users, Settings, ArrowLeft, Home, Layers, Layers3, BarChart3, Mail } from "lucide-react";
+import { Building2, FolderOpen, Users, Settings, ArrowLeft, Home, Layers, Layers3, BarChart3, Mail, CalendarDays } from "lucide-react";
 
 export default function ManagementPage() {
   const [activeTab, setActiveTab] = useState("kpis");
@@ -210,7 +211,7 @@ export default function ManagementPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:grid-cols-7">
+          <TabsList className="grid w-full grid-cols-8 lg:w-auto lg:grid-cols-8">
             <TabsTrigger value="kpis" className="flex items-center space-x-2">
               <BarChart3 className="w-4 h-4" />
               <span>KPIs</span>
@@ -234,6 +235,10 @@ export default function ManagementPage() {
             <TabsTrigger value="subphases" className="flex items-center space-x-2">
               <Layers3 className="w-4 h-4" />
               <span>Subfases</span>
+            </TabsTrigger>
+            <TabsTrigger value="subphases-dates" className="flex items-center space-x-2">
+              <CalendarDays className="w-4 h-4" />
+              <span>Datas</span>
             </TabsTrigger>
             <TabsTrigger value="follow-up" className="flex items-center space-x-2">
               <Mail className="w-4 h-4" />
@@ -317,6 +322,22 @@ export default function ManagementPage() {
                 </p>
               </div>
               <SubphasesManagement />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="subphases-dates" className="space-y-6">
+            <div className={`${getCardClasses()} p-6`}>
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold text-theme-primary flex items-center gap-3 mb-2">
+                  <CalendarDays className="w-6 h-6 text-accent-blue" />
+                  Datas das Subfases
+                </h2>
+                <p className="text-theme-secondary">
+                  Defina datas de início e conclusão para as subfases dos projetos. 
+                  Ao definir uma data de conclusão, um agendamento automático será criado.
+                </p>
+              </div>
+              <ProjectSubphasesDates />
             </div>
           </TabsContent>
 

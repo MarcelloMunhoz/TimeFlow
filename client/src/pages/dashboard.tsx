@@ -7,6 +7,7 @@ import CalendarView from "@/components/calendar-view";
 import TaskList from "@/components/task-list";
 import AppointmentForm from "@/components/appointment-form";
 import TimeAnalysisDashboard from "@/components/time-analysis-dashboard";
+import DailyScheduleExport from "@/components/daily-schedule-export";
 
 import ThemeController from "@/components/theme-controller";
 import { getTodayString } from "@/lib/date-utils";
@@ -79,7 +80,7 @@ function ProjectStatusCard() {
 }
 
 // Quick Actions Card Component
-function QuickActionsCard() {
+function QuickActionsCard({ selectedDate }: { selectedDate: string }) {
   const { getCardClasses, getButtonClasses } = useTheme();
   return (
     <div className={`${getCardClasses()} p-6`}>
@@ -106,6 +107,16 @@ function QuickActionsCard() {
             Configurações
           </button>
         </Link>
+        <DailyScheduleExport 
+          selectedDate={selectedDate} 
+          showTriggerButton={false}
+          triggerElement={
+            <button className={`${getButtonClasses('outline')} w-full justify-start flex items-center gap-2`}>
+              <Download className="w-4 h-4" />
+              Exportar Cronograma
+            </button>
+          }
+        />
         <div className="pt-2 border-t border-theme-muted">
           <div className="text-xs text-theme-muted mb-2 flex items-center">
             <Clock className="w-3 h-3 mr-1" />
@@ -202,14 +213,14 @@ export default function Dashboard() {
               <div className="flex items-center space-x-1 bg-theme-tertiary rounded-lg p-1">
                 <button
                   onClick={() => setView('calendar')}
-                  className={`${getButtonClasses(view === 'calendar' ? 'primary' : 'ghost')} px-3 py-1 text-sm flex items-center gap-2 ${view === 'calendar' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
+                  className={`${getButtonClasses(view === 'calendar' ? 'primary' : 'outline')} px-3 py-1 text-sm flex items-center gap-2 ${view === 'calendar' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
                 >
                   <CalendarIcon className="w-4 h-4" />
                   Calendário
                 </button>
                 <button
                   onClick={() => setView('list')}
-                  className={`${getButtonClasses(view === 'list' ? 'primary' : 'ghost')} px-3 py-1 text-sm flex items-center gap-2 ${view === 'list' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
+                  className={`${getButtonClasses(view === 'list' ? 'primary' : 'outline')} px-3 py-1 text-sm flex items-center gap-2 ${view === 'list' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
                 >
                   <List className="w-4 h-4" />
                   Lista
@@ -221,13 +232,13 @@ export default function Dashboard() {
                 <div className="flex items-center space-x-1 bg-theme-tertiary rounded-lg p-1">
                   <button
                     onClick={() => setViewMode('week')}
-                    className={`${getButtonClasses(viewMode === 'week' ? 'primary' : 'ghost')} px-3 py-1 text-sm ${viewMode === 'week' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
+                    className={`${getButtonClasses(viewMode === 'week' ? 'primary' : 'outline')} px-3 py-1 text-sm ${viewMode === 'week' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
                   >
                     Semana
                   </button>
                   <button
                     onClick={() => setViewMode('day')}
-                    className={`${getButtonClasses(viewMode === 'day' ? 'primary' : 'ghost')} px-3 py-1 text-sm ${viewMode === 'day' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
+                    className={`${getButtonClasses(viewMode === 'day' ? 'primary' : 'outline')} px-3 py-1 text-sm ${viewMode === 'day' ? 'bg-accent-blue text-white shadow-sm' : ''}`}
                   >
                     Dia
                   </button>
@@ -243,10 +254,7 @@ export default function Dashboard() {
                   className="pl-10 w-80"
                 />
               </div>
-              <button className={`${getButtonClasses('outline')} flex items-center gap-2`}>
-                <Download className="w-4 h-4" />
-                Exportar
-              </button>
+              <DailyScheduleExport selectedDate={selectedDate} />
             </div>
           </div>
 
@@ -271,7 +279,7 @@ export default function Dashboard() {
               <ProjectStatusCard />
 
               {/* Quick Actions */}
-              <QuickActionsCard />
+              <QuickActionsCard selectedDate={selectedDate} />
             </div>
           </div>
         </main>

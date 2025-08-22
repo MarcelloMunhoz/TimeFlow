@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug - Criação de Agendamentos</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 15px; border-radius: 4px; }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>Debug - Criação de Agendamentos</h1>
+    
+    <div class="form-group">
+        <label for="title">Título *</label>
+        <input type="text" id="title" value="Teste de Agendamento" required>
+    </div>
+    
+    <div class="form-group">
+        <label for="description">Descrição</label>
+        <input type="text" id="description" value="Teste para debug">
+    </div>
+    
+    <div class="form-group">
+        <label for="date">Data *</label>
+        <input type="date" id="date" value="2025-01-20" required>
+    </div>
+    
+    <div class="form-group">
+        <label for="startTime">Hora de Início *</label>
+        <input type="time" id="startTime" value="09:00" required>
+    </div>
+    
+    <div class="form-group">
+        <label for="durationMinutes">Duração (minutos) *</label>
+        <input type="number" id="durationMinutes" value="60" min="1" required>
+    </div>
+    
+    <div class="form-group">
+        <label for="allowWeekendOverride">Permitir Fim de Semana</label>
+        <select id="allowWeekendOverride">
+            <option value="false">Não</option>
+            <option value="true">Sim</option>
+        </select>
+    </div>
+    
+    <button onclick="testAppointmentCreation()">Testar Criação</button>
+    
+    <div id="result"></div>
+    
+    <script>
+        async function testAppointmentCreation() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="info">Testando criação de agendamento...</div>';
+            
+            try {
+                const testData = {
+                    title: document.getElementById('title').value,
+                    description: document.getElementById('description').value,
+                    date: document.getElementById('date').value,
+                    startTime: document.getElementById('startTime').value,
+                    durationMinutes: parseInt(document.getElementById('durationMinutes').value),
+                    allowWeekendOverride: document.getElementById('allowWeekendOverride').value === 'true'
+                };
+                
+                console.log('📤 Dados sendo enviados:', testData);
+                
+                const response = await fetch('/api/appointments', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                console.log('📥 Status da resposta:', response.status);
+                console.log('📥 Headers da resposta:', Object.fromEntries(response.headers.entries()));
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('❌ Erro na resposta:', errorData);
+                    resultDiv.innerHTML = `<div class="error">
+                        <h3>Erro na criação:</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Mensagem:</strong> ${errorData.message || 'Erro desconhecido'}</p>
+                        <p><strong>Detalhes:</strong> ${JSON.stringify(errorData, null, 2)}</p>
+                    </div>`;
+                    return;
+                }
+                
+                const result = await response.json();
+                console.log('✅ Agendamento criado com sucesso:', result);
+                resultDiv.innerHTML = `<div class="success">
+                    <h3>Sucesso!</h3>
+                    <p><strong>ID:</strong> ${result.id}</p>
+                    <p><strong>Título:</strong> ${result.title}</p>
+                    <p><strong>Data:</strong> ${result.date}</p>
+                    <p><strong>Hora:</strong> ${result.startTime}</p>
+                    <p><strong>Duração:</strong> ${result.durationMinutes} minutos</p>
+                </div>`;
+                
+            } catch (error) {
+                console.error('💥 Erro durante o teste:', error);
+                resultDiv.innerHTML = `<div class="error">
+                    <h3>Erro de conexão:</h3>
+                    <p>${error.message}</p>
+                </div>`;
+            }
+        }
+        
+        // Testar conexão com a API
+        async function testConnection() {
+            try {
+                const response = await fetch('/api/companies');
+                if (response.ok) {
+                    console.log('✅ Conexão com a API OK');
+                } else {
+                    console.log('❌ Problema na conexão com a API');
+                }
+            } catch (error) {
+                console.error('💥 Erro na conexão:', error);
+            }
+        }
+        
+        // Testar conexão ao carregar a página
+        testConnection();
+    </script>
+</body>
+</html>
+
