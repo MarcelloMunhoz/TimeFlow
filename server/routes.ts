@@ -956,6 +956,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== WEEKLY SUMMARY EXPORT =====
+
+  // Get weekly summary for export
+  app.get("/api/summary/weekly/:startDate", async (req, res) => {
+    try {
+      const { startDate } = req.params;
+      console.log(`📊 Fetching REAL weekly summary starting from ${startDate}`);
+      
+      const weeklySummary = await storage.getWeeklySummaryForExport(startDate);
+      console.log(`✅ Found ${weeklySummary.projects.length} REAL active projects for week starting ${startDate}`);
+      
+      res.json(weeklySummary);
+    } catch (error) {
+      console.error("Error fetching weekly summary:", error);
+      console.error("Error details:", error.message);
+      console.error("Error stack:", error.stack);
+      res.status(500).json({ message: "Failed to fetch weekly summary", error: error.message });
+    }
+  });
+
+  // Export weekly summary as formatted text
+  app.get("/api/summary/export/:startDate", async (req, res) => {
+    try {
+      const { startDate } = req.params;
+      const { format = 'text' } = req.query;
+      
+      console.log(`📄 Exporting REAL weekly summary starting from ${startDate} in ${format} format`);
+      
+      const exportData = await storage.exportWeeklySummary(startDate, format as string);
+      
+      if (format === 'text') {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="resumo-semanal-${startDate}.txt"`);
+        res.send(exportData);
+      } else {
+        res.json(exportData);
+      }
+    } catch (error) {
+      console.error("Error exporting REAL weekly summary:", error);
+      res.status(500).json({ message: "Failed to export weekly summary" });
+    }
+  });
+
   // Link appointment to project subphase
   app.post("/api/appointments/:appointmentId/link-subphase", async (req, res) => {
     try {

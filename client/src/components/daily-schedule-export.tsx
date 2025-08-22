@@ -60,14 +60,19 @@ export default function DailyScheduleExport({
   const handleExport = async () => {
     try {
       setIsExporting(true);
+      console.log('💾 Attempting to export schedule for date:', exportDate);
       
       const response = await fetch(`/api/schedule/export/${exportDate}?format=text`);
+      console.log('💾 Export response status:', response.status);
       
       if (!response.ok) {
-        throw new Error('Falha ao exportar cronograma');
+        const errorText = await response.text();
+        console.error('💾 Export response error:', errorText);
+        throw new Error(`Falha ao exportar cronograma: ${response.status}`);
       }
       
       const text = await response.text();
+      console.log('💾 Generated text length:', text.length);
       setExportedText(text);
       
       // Download file
@@ -81,6 +86,8 @@ export default function DailyScheduleExport({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
+      console.log('💾 File download initiated successfully');
+      
       toast({
         title: "📅 Cronograma exportado!",
         description: `Arquivo cronograma-${exportDate}.txt baixado com sucesso.`
@@ -90,7 +97,7 @@ export default function DailyScheduleExport({
       console.error('Export error:', error);
       toast({
         title: "❌ Erro na exportação",
-        description: "Não foi possível exportar o cronograma. Tente novamente.",
+        description: `Não foi possível exportar o cronograma: ${error.message}`,
         variant: "destructive"
       });
     } finally {
@@ -101,15 +108,27 @@ export default function DailyScheduleExport({
   const handleCopyToClipboard = async () => {
     try {
       setIsExporting(true);
+      console.log('📋 Attempting to copy schedule for date:', exportDate);
       
       const response = await fetch(`/api/schedule/export/${exportDate}?format=text`);
+      console.log('📋 Copy response status:', response.status);
       
       if (!response.ok) {
-        throw new Error('Falha ao gerar cronograma');
+        const errorText = await response.text();
+        console.error('📋 Copy response error:', errorText);
+        throw new Error(`Falha ao gerar cronograma: ${response.status}`);
       }
       
       const text = await response.text();
+      console.log('📋 Generated text length:', text.length);
+      
+      // Check if clipboard API is available
+      if (!navigator.clipboard) {
+        throw new Error('Clipboard API não disponível neste navegador');
+      }
+      
       await navigator.clipboard.writeText(text);
+      console.log('📋 Text copied to clipboard successfully');
       
       toast({
         title: "📋 Copiado!",
@@ -120,7 +139,7 @@ export default function DailyScheduleExport({
       console.error('Copy error:', error);
       toast({
         title: "❌ Erro ao copiar",
-        description: "Não foi possível copiar o cronograma. Tente novamente.",
+        description: `Não foi possível copiar o cronograma: ${error.message}`,
         variant: "destructive"
       });
     } finally {
@@ -236,6 +255,17 @@ export default function DailyScheduleExport({
                   <div className="h-4 bg-theme-tertiary rounded w-1/2"></div>
                   <div className="h-4 bg-theme-tertiary rounded w-3/4"></div>
                   <div className="h-4 bg-theme-tertiary rounded w-1/3"></div>
+                </div>
+              ) : previewError ? (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-2">❌</div>
+                  <div className="text-lg font-medium text-red-600">Erro ao carregar cronograma</div>
+                  <div className="text-theme-secondary text-sm mt-2">
+                    {previewError.message || 'Erro desconhecido'}
+                  </div>
+                  <div className="text-xs text-theme-muted mt-2">
+                    Verifique se o servidor está rodando e tente novamente
+                  </div>
                 </div>
               ) : scheduleData ? (
                 <div className="space-y-4">

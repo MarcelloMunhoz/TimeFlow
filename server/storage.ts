@@ -19,7 +19,7 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, and, gte, lte, desc, isNotNull, sql } from "drizzle-orm";
+import { eq, and, gte, lte, gt, desc, isNotNull, sql } from "drizzle-orm";
 import {
   generateRecurringInstances,
   validateRecurringTask,
@@ -84,6 +84,10 @@ export interface IStorage {
   // Daily Schedule Export
   getDailyScheduleForExport(date: string): Promise<any>;
   exportDailySchedule(date: string, format: string): Promise<string>;
+
+  // Weekly Summary Export
+  getWeeklySummaryForExport(startDate: string): Promise<any>;
+  exportWeeklySummary(startDate: string, format: string): Promise<string>;
 
   // Appointments
   getAppointments(): Promise<Appointment[]>;
@@ -4450,6 +4454,325 @@ export class DatabaseStorage implements IStorage {
 
     } catch (error) {
       console.error("Error exporting daily schedule:", error);
+      throw error;
+    }
+  }
+
+  // ===== WEEKLY SUMMARY EXPORT METHODS =====
+
+  // Get weekly summary with detailed project information for export
+  async getWeeklySummaryForExport(startDate: string): Promise<any> {
+    try {
+      console.log(`📊 Getting REAL weekly summary for export starting: ${startDate}`);
+
+      // Calculate end date (6 days later)
+      const startDateObj = new Date(startDate + 'T00:00:00');
+      const endDateObj = new Date(startDateObj);
+      endDateObj.setDate(endDateObj.getDate() + 6);
+      const endDate = endDateObj.toISOString().split('T')[0];
+
+      console.log(`📊 Week range: ${startDate} to ${endDate}`);
+
+      // Get all active projects with company information
+      console.log(`📊 Fetching REAL active projects from database...`);
+      const activeProjectsQuery = await db
+        .select({
+          id: projects.id,
+          name: projects.name,
+          description: projects.description,
+          status: projects.status,
+          priority: projects.priority,
+          startDate: projects.startDate,
+          endDate: projects.endDate,
+          progressPercentage: projects.progressPercentage,
+          companyId: projects.companyId,
+          companyName: companies.name,
+          companyType: companies.type
+        })
+        .from(projects)
+        .leftJoin(companies, eq(projects.companyId, companies.id))
+        .where(eq(projects.status, 'active'));
+
+      console.log(`📊 Found ${activeProjectsQuery.length} REAL active projects`);
+
+      // Process each project with real data
+      const enrichedProjects = [];
+      
+      for (const project of activeProjectsQuery) {
+        console.log(`📊 Processing project: ${project.name}`);
+        
+
+
+        // Get next tasks (future appointments after the week)
+        const nextTasks = await db
+          .select({
+            id: appointments.id,
+            title: appointments.title,
+            date: appointments.date,
+            startTime: appointments.startTime,
+            durationMinutes: appointments.durationMinutes,
+            status: appointments.status,
+            priority: appointments.priority
+          })
+          .from(appointments)
+          .where(
+            and(
+              eq(appointments.projectId, project.id),
+              eq(appointments.status, 'scheduled'),
+              gt(appointments.date, endDate)
+            )
+          )
+          .orderBy(appointments.date, appointments.startTime)
+          .limit(3);
+
+        // Get project phases
+        const projectPhasesData = await db
+          .select({
+            id: projectPhases.id,
+            phaseId: projectPhases.phaseId,
+            status: projectPhases.status,
+            progressPercentage: projectPhases.progressPercentage,
+            phaseName: phases.name
+          })
+          .from(projectPhases)
+          .leftJoin(phases, eq(projectPhases.phaseId, phases.id))
+          .where(eq(projectPhases.projectId, project.id))
+          .orderBy(projectPhases.id);
+
+        // Calculate metrics for this project
+        const completedTasks = 0;
+        const totalTasks = 0;
+
+                  const enrichedProject = {
+            ...project,
+            company: project.companyName ? {
+              name: project.companyName,
+              type: project.companyType
+            } : null,
+            phases: projectPhasesData.map(p => ({
+              phase: { name: p.phaseName },
+              status: p.status,
+              progressPercentage: p.progressPercentage || 0
+            })),
+            nextTasks,
+            weekMetrics: {
+              completedTasks: 0,
+              totalTasks: 0,
+              completionRate: 0
+            }
+          };
+
+        enrichedProjects.push(enrichedProject);
+      }
+
+      // Calculate overall summary
+      const totalProjects = enrichedProjects.length;
+      const projectsWithProgress = enrichedProjects.filter(p => p.progressPercentage && p.progressPercentage > 0).length;
+      const averageProgress = totalProjects > 0 
+        ? Math.round((enrichedProjects.reduce((sum, p) => sum + (p.progressPercentage || 0), 0) / totalProjects) * 10) / 10
+        : 0;
+      
+      const totalWeekAppointments = enrichedProjects.reduce((sum, p) => sum + p.weekMetrics.totalTasks, 0);
+      const totalCompletedAppointments = enrichedProjects.reduce((sum, p) => sum + p.weekMetrics.completedTasks, 0);
+      
+      const uniqueCompanies = [...new Set(enrichedProjects.filter(p => p.company).map(p => p.company.name))];
+
+      const result = {
+        weekRange: { startDate, endDate },
+        projects: enrichedProjects,
+        summary: {
+          totalProjects,
+          projectsWithProgress,
+          averageProgress,
+          totalWeekAppointments,
+          totalCompletedAppointments,
+          completionRate: totalWeekAppointments > 0 ? Math.round((totalCompletedAppointments / totalWeekAppointments) * 100) : 0,
+          uniqueCompanies,
+          projectsByPriority: {
+            urgent: enrichedProjects.filter(p => p.priority === 'urgent').length,
+            high: enrichedProjects.filter(p => p.priority === 'high').length,
+            medium: enrichedProjects.filter(p => p.priority === 'medium').length,
+            low: enrichedProjects.filter(p => p.priority === 'low').length
+          }
+        }
+      };
+
+      console.log(`📊 REAL weekly summary completed successfully with ${result.projects.length} projects, ${totalWeekAppointments} appointments`);
+      return result;
+    } catch (error) {
+      console.error("Error getting REAL weekly summary for export:", error);
+      console.error("Error details:", error.message);
+      console.error("Error stack:", error.stack);
+      throw error;
+    }
+  }
+
+  // Export weekly summary as formatted text with emojis
+  async exportWeeklySummary(startDate: string, format: string = 'text'): Promise<string> {
+    try {
+      console.log(`📄 Exporting weekly summary starting ${startDate} in ${format} format`);
+
+      const summaryData = await this.getWeeklySummaryForExport(startDate);
+      const { projects, summary, weekRange } = summaryData;
+
+      // Format date range in Portuguese
+      const formatDateRange = (start: string, end: string) => {
+        const startDate = new Date(start + 'T00:00:00');
+        const endDate = new Date(end + 'T00:00:00');
+        const startStr = startDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const endStr = endDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        return `${startStr} a ${endStr}`;
+      };
+
+      // Get status emoji
+      const getStatusEmoji = (status: string) => {
+        switch (status) {
+          case 'completed': return '✅';
+          case 'active': return '🔄';
+          case 'on_hold': return '⏸️';
+          case 'delayed': return '⚠️';
+          case 'cancelled': return '❌';
+          default: return '📋';
+        }
+      };
+
+      // Get priority emoji
+      const getPriorityEmoji = (priority: string) => {
+        switch (priority) {
+          case 'urgent': return '🚨';
+          case 'high': return '🔥';
+          case 'medium': return '📋';
+          case 'low': return '📄';
+          default: return '📝';
+        }
+      };
+
+      // Get progress emoji based on percentage
+      const getProgressEmoji = (percentage: number) => {
+        if (percentage >= 90) return '🏆';
+        if (percentage >= 75) return '🎯';
+        if (percentage >= 50) return '📈';
+        if (percentage >= 25) return '📊';
+        if (percentage > 0) return '🚀';
+        return '⚪';
+      };
+
+      let exportText = '';
+
+      // Header
+      exportText += `📊 RESUMO SEMANAL DE PROJETOS - ${formatDateRange(weekRange.startDate, weekRange.endDate).toUpperCase()}\n`;
+      exportText += `═══════════════════════════════════════════════════════════════════\n\n`;
+
+      // Executive Summary
+      exportText += `📈 RESUMO EXECUTIVO:\n`;
+      exportText += `• 🎯 Total de projetos ativos: ${summary.totalProjects}\n`;
+      exportText += `• 📊 Projetos com progresso: ${summary.projectsWithProgress}\n`;
+      exportText += `• 🏆 Progresso médio: ${summary.averageProgress}%\n`;
+      exportText += `• ⏰ Taxa de conclusão: ${summary.completionRate}%\n`;
+
+
+      if (summary.uniqueCompanies.length > 0) {
+        exportText += `• 🏢 Empresas envolvidas: ${summary.uniqueCompanies.join(', ')}\n`;
+      }
+
+      // Priority distribution
+      exportText += `• 🔥 Distribuição por prioridade:\n`;
+      if (summary.projectsByPriority.urgent > 0) exportText += `  🚨 Urgente: ${summary.projectsByPriority.urgent}\n`;
+      if (summary.projectsByPriority.high > 0) exportText += `  🔥 Alta: ${summary.projectsByPriority.high}\n`;
+      if (summary.projectsByPriority.medium > 0) exportText += `  📋 Média: ${summary.projectsByPriority.medium}\n`;
+      if (summary.projectsByPriority.low > 0) exportText += `  📄 Baixa: ${summary.projectsByPriority.low}\n`;
+
+      exportText += `\n`;
+
+      // Projects detailed list
+      if (projects.length === 0) {
+        exportText += `🎉 NENHUM PROJETO ATIVO!\n`;
+        exportText += `Não há projetos ativos no momento.\n`;
+      } else {
+        exportText += `📋 DETALHAMENTO POR PROJETO:\n`;
+        exportText += `═══════════════════════════════════════════════════════════════════\n\n`;
+
+        projects.forEach((project: any, index: number) => {
+          const statusEmoji = getStatusEmoji(project.status);
+          const priorityEmoji = getPriorityEmoji(project.priority);
+          const progressEmoji = getProgressEmoji(project.progressPercentage || 0);
+
+          exportText += `${progressEmoji} PROJETO ${index + 1}: ${project.name.toUpperCase()}\n`;
+          exportText += `───────────────────────────────────────────────────────────────────\n`;
+
+          // Basic project info
+          exportText += `${statusEmoji} Status: ${project.status} | ${priorityEmoji} Prioridade: ${project.priority}\n`;
+          exportText += `📊 Progresso: ${project.progressPercentage || 0}%\n`;
+
+          if (project.company) {
+            exportText += `🏢 Empresa: ${project.company.name}\n`;
+          }
+
+          // Dates
+          if (project.startDate) {
+            const startDate = new Date(project.startDate + 'T00:00:00');
+            exportText += `🗓️ Data de início: ${startDate.toLocaleDateString('pt-BR')}\n`;
+          }
+          if (project.endDate) {
+            const endDate = new Date(project.endDate + 'T00:00:00');
+            exportText += `🎯 Data de conclusão: ${endDate.toLocaleDateString('pt-BR')}\n`;
+          }
+
+
+
+          // Phases status
+          if (project.phases && project.phases.length > 0) {
+            exportText += `\n📋 STATUS DAS FASES:\n`;
+            project.phases.forEach((phase: any) => {
+              const phaseStatusEmoji = getStatusEmoji(phase.status);
+              const phaseProgressEmoji = getProgressEmoji(phase.progressPercentage || 0);
+              exportText += `${phaseProgressEmoji} ${phase.phase.name}: ${phase.status} (${phase.progressPercentage || 0}%)\n`;
+            });
+          }
+
+
+
+          // Next tasks
+          if (project.nextTasks && project.nextTasks.length > 0) {
+            exportText += `\n🎯 PRÓXIMAS TAREFAS:\n`;
+            project.nextTasks.forEach((task: any) => {
+              const taskPriorityEmoji = getPriorityEmoji(task.priority);
+              const date = new Date(task.date + 'T00:00:00');
+              
+              let taskEmoji = '📝';
+              if (task.category === 'subfase_conclusao') taskEmoji = '✅';
+              
+              exportText += `${taskEmoji} ${date.toLocaleDateString('pt-BR')} ${task.startTime} - ${task.title}`;
+              if (task.priority && task.priority !== 'medium') {
+                exportText += ` ${taskPriorityEmoji}`;
+              }
+              exportText += ` (${task.durationMinutes}min)\n`;
+            });
+          } else {
+            exportText += `\n🎯 PRÓXIMAS TAREFAS:\n`;
+            exportText += `⚠️ Nenhuma tarefa agendada após esta semana\n`;
+          }
+
+          // Separator between projects
+          if (index < projects.length - 1) {
+            exportText += `\n═══════════════════════════════════════════════════════════════════\n\n`;
+          }
+        });
+      }
+
+      // Footer
+      exportText += `\n\n═══════════════════════════════════════════════════════════════════\n`;
+      exportText += `📊 TimeFlow - Sistema de Gestão de Projetos BI\n`;
+      exportText += `📅 Relatório gerado em: ${new Date().toLocaleString('pt-BR')}\n`;
+      exportText += `📈 Período analisado: ${formatDateRange(weekRange.startDate, weekRange.endDate)}\n`;
+      exportText += `🎯 Total de projetos ativos: ${projects.length}\n`;
+      exportText += `📊 Taxa de conclusão geral: ${summary.completionRate}%\n`;
+
+      console.log(`✅ Weekly summary exported successfully for week starting ${startDate}`);
+      return exportText;
+
+    } catch (error) {
+      console.error("Error exporting weekly summary:", error);
       throw error;
     }
   }

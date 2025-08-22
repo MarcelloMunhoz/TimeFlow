@@ -8,6 +8,7 @@ import TaskList from "@/components/task-list";
 import AppointmentForm from "@/components/appointment-form";
 import TimeAnalysisDashboard from "@/components/time-analysis-dashboard";
 import DailyScheduleExport from "@/components/daily-schedule-export";
+import WeeklySummaryExport from "@/components/weekly-summary-export";
 
 import ThemeController from "@/components/theme-controller";
 import { getTodayString } from "@/lib/date-utils";
@@ -114,6 +115,15 @@ function QuickActionsCard({ selectedDate }: { selectedDate: string }) {
             <button className={`${getButtonClasses('outline')} w-full justify-start flex items-center gap-2`}>
               <Download className="w-4 h-4" />
               Exportar Cronograma
+            </button>
+          }
+        />
+        <WeeklySummaryExport 
+          showTriggerButton={false}
+          triggerElement={
+            <button className={`${getButtonClasses('outline')} w-full justify-start flex items-center gap-2`}>
+              <TrendingUp className="w-4 h-4" />
+              Resumo Semanal
             </button>
           }
         />
@@ -254,7 +264,10 @@ export default function Dashboard() {
                   className="pl-10 w-80"
                 />
               </div>
-              <DailyScheduleExport selectedDate={selectedDate} />
+              <div className="flex items-center space-x-2">
+                <DailyScheduleExport selectedDate={selectedDate} />
+                <WeeklySummaryExport />
+              </div>
             </div>
           </div>
 
