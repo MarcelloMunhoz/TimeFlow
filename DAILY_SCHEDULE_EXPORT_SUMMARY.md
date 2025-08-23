@@ -245,3 +245,4 @@ O sistema está **pronto para uso**! Para começar a usar:
 5. Use **"Copiar"** para enviar ao seu chefe
 
 **Agora você pode enviar seu cronograma diário para o chefe todas as manhãs com apenas alguns cliques!** 🎯📅✨
+

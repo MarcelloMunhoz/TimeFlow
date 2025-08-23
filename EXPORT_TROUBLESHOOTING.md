@@ -168,3 +168,4 @@ Se o problema persistir:
 5. ✅ **Passos para reproduzir**
 
 **O sistema está funcionando corretamente nos testes - o problema pode ser específico do ambiente ou configuração local.**
+

@@ -185,3 +185,4 @@ Todas as funcionalidades solicitadas foram implementadas com sucesso:
 
 O sistema agora oferece uma solução completa e integrada para o gerenciamento temporal de subfases, automatizando tarefas repetitivas e garantindo que nenhum prazo seja perdido.
 
+
